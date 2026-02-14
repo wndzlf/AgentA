@@ -1,0 +1,57 @@
+name: AgentMatchPrototype
+options:
+  bundleIdPrefix: com.agentmatch
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: 16.0
+targets:
+  AgentMatchPrototype:
+    type: application
+    platform: iOS
+    sources:
+      - path: AgentMatchPrototype/App
+        type: folder
+      - path: AgentMatchPrototype/Core
+        type: folder
+      - path: AgentMatchPrototype/ViewModels
+        type: folder
+      - path: AgentMatchPrototype/Views
+        type: folder
+      - path: AgentMatchPrototype/Resources
+        type: folder
+      - path: AgentMatchPrototype/App/AgentMatchPrototypeApp.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Core/APIClient.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Core/Models.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/ViewModels/HomeViewModel.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Views/HomeView.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Views/QuickAgentView.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Views/CategoryDetailView.swift
+        buildPhase: sources
+        group: _BuildFiles
+      - path: AgentMatchPrototype/Resources/Assets.xcassets
+        buildPhase: resources
+        group: _BuildFiles
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentmatch.prototype
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: AgentMatchPrototype/Resources/Info.plist
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets: []

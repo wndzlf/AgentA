@@ -62,4 +62,20 @@ final class APIClient {
         }
         return try JSONDecoder().decode(AgentResponse.self, from: data)
     }
+
+    func routeAgent(message: String, limit: Int = 5) async throws -> RouteResponse {
+        guard let url = URL(string: "\(baseURL)/agent/route") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["message": message, "limit": limit],
+            options: []
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        return try JSONDecoder().decode(RouteResponse.self, from: data)
+    }
 }

@@ -5,6 +5,8 @@ struct Category: Identifiable, Codable, Hashable {
     let name: String
     let summary: String
     let icon: String
+    let domain: String?
+    let focus: String?
 }
 
 struct Recommendation: Identifiable, Codable, Hashable {
@@ -40,6 +42,29 @@ struct CategorySchemaResponse: Codable {
         case requiredFields = "required_fields"
         case examples
     }
+}
+
+struct RouteCandidate: Codable, Hashable {
+    let categoryID: String
+    let categoryName: String
+    let domain: String
+    let score: Double
+    let reason: String
+    let suggestedMode: String
+
+    enum CodingKeys: String, CodingKey {
+        case categoryID = "category_id"
+        case categoryName = "category_name"
+        case domain
+        case score
+        case reason
+        case suggestedMode = "suggested_mode"
+    }
+}
+
+struct RouteResponse: Codable {
+    let selected: RouteCandidate?
+    let candidates: [RouteCandidate]
 }
 
 struct AgentResponse: Codable {

@@ -76,6 +76,8 @@ curl -X POST "http://127.0.0.1:8000/dev/seed?reset=true"
 
 - `GET /categories`
 - `GET /categories/{category_id}/bootstrap?mode=find|publish`
+- `GET /categories/{category_id}/schema?mode=find|publish`
+- `POST /agent/route` (자유문장 → 카테고리/모드 추론)
 - `POST /agent/ask` (`mode=find|publish`)
 - `POST /dev/seed?reset=true|false`
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional, Tuple
 
 # domain:
@@ -392,6 +393,139 @@ def mode_options(category_id: Optional[str]) -> List[Dict[str, str]]:
                 "id": mode_id,
                 "title": meta["title"],
                 "description": meta["description"],
+            }
+        )
+    return out
+
+
+_NORMALIZE_RE = re.compile(r"[^0-9a-zA-Z가-힣]+")
+
+PUBLISH_HINT_KEYWORDS = {
+    "올려",
+    "올리",
+    "등록",
+    "판매",
+    "팔고",
+    "팔아",
+    "양도",
+    "모집",
+    "구해요",
+    "지원자",
+}
+
+FIND_HINT_KEYWORDS = {
+    "찾아",
+    "찾고",
+    "추천",
+    "원해",
+    "구해",
+    "매칭",
+    "조건",
+    "비교",
+    "후보",
+}
+
+CATEGORY_ROUTE_HINTS: Dict[str, List[str]] = {
+    "console": ["닌텐도", "스위치", "플스", "playstation", "xbox", "게임기"],
+    "gaminggear": ["게이밍", "키보드", "마우스", "헤드셋", "패드", "장비"],
+    "mobile": ["아이폰", "갤럭시", "스마트폰", "휴대폰"],
+    "tablet": ["아이패드", "태블릿", "펜슬"],
+    "computer": ["노트북", "맥북", "데스크탑", "컴퓨터"],
+    "luxury": ["명품", "샤넬", "루이비통", "에르메스", "롤렉스", "까르띠에"],
+    "ticket": ["티켓", "양도", "공연", "콘서트", "좌석"],
+    "dating": ["소개팅", "연애", "이성", "데이트"],
+    "friend": ["친구", "동네친구", "메이트"],
+    "soccer": ["축구", "11:11", "상대팀"],
+    "futsal": ["풋살", "5:5", "풋볼"],
+}
+
+
+def _normalize_text(text: str) -> str:
+    cleaned = _NORMALIZE_RE.sub(" ", text).strip().lower()
+    return " ".join(token for token in cleaned.split() if token)
+
+
+def infer_mode_from_message(message: str) -> str:
+    normalized = _normalize_text(message)
+    if not normalized:
+        return "find"
+
+    publish_score = sum(1 for token in PUBLISH_HINT_KEYWORDS if token in normalized)
+    find_score = sum(1 for token in FIND_HINT_KEYWORDS if token in normalized)
+    if publish_score > find_score:
+        return "publish"
+    return "find"
+
+
+def route_categories(message: str, limit: int = 5) -> List[Dict[str, object]]:
+    normalized = _normalize_text(message)
+    if not normalized:
+        return []
+    tokens = normalized.split()
+    inferred_mode = infer_mode_from_message(message)
+
+    scored: List[Tuple[float, Dict[str, str], List[str]]] = []
+    for item in CATEGORY_DEFS:
+        haystack = _normalize_text(
+            f"{item['id']} {item['name']} {item['summary']} {item['domain']} {item['focus']}"
+        )
+        if not haystack:
+            continue
+
+        score = 0.0
+        matched_tokens: List[str] = []
+        name_token = _normalize_text(item["name"])
+        if name_token and name_token in normalized:
+            score += 8.0
+            matched_tokens.append(item["name"])
+
+        for token in tokens:
+            if token and token in haystack:
+                score += 1.3
+                matched_tokens.append(token)
+
+        for alias in CATEGORY_ROUTE_HINTS.get(item["id"], []):
+            alias_token = _normalize_text(alias)
+            if alias_token and alias_token in normalized:
+                score += 5.0
+                matched_tokens.append(alias)
+
+        domain = item["domain"]
+        if domain == "market" and any(t in normalized for t in ["거래", "판매", "구매", "양도", "매물"]):
+            score += 2.5
+        if domain == "people" and any(t in normalized for t in ["친구", "소개팅", "연애", "모임", "사람"]):
+            score += 2.5
+        if domain == "sport" and any(
+            t in normalized for t in ["축구", "풋살", "테니스", "농구", "운동", "매치", "경기"]
+        ):
+            score += 2.5
+        if domain == "service" and any(t in normalized for t in ["의뢰", "외주", "작업", "서비스", "대행"]):
+            score += 2.5
+        if domain == "learning" and any(t in normalized for t in ["스터디", "과외", "클래스", "레슨", "학습"]):
+            score += 2.5
+        if domain == "job" and any(t in normalized for t in ["채용", "구직", "이직", "알바", "커리어"]):
+            score += 2.5
+
+        if score <= 0:
+            continue
+        dedup_tokens = sorted(set(matched_tokens), key=matched_tokens.index)[:4]
+        scored.append((score, item, dedup_tokens))
+
+    scored.sort(key=lambda row: (-row[0], row[1]["id"]))
+
+    out: List[Dict[str, object]] = []
+    for score, item, matched in scored[: max(1, limit)]:
+        reason = "핵심 키워드 매칭"
+        if matched:
+            reason = f"매칭 키워드: {', '.join(matched)}"
+        out.append(
+            {
+                "category_id": item["id"],
+                "category_name": item["name"],
+                "domain": item["domain"],
+                "score": round(score, 2),
+                "reason": reason,
+                "suggested_mode": inferred_mode,
             }
         )
     return out

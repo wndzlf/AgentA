@@ -4,13 +4,32 @@ struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var query = ""
     @State private var showQuickAgent = false
+    @State private var selectedDomain = "all"
 
     private var filteredCategories: [Category] {
-        guard !query.isEmpty else { return viewModel.categories }
-        return viewModel.categories.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.summary.localizedCaseInsensitiveContains(query)
+        viewModel.categories.filter { category in
+            let matchesDomain = selectedDomain == "all" || (category.domain ?? "unknown") == selectedDomain
+            let matchesQuery = query.isEmpty
+                || category.name.localizedCaseInsensitiveContains(query)
+                || category.summary.localizedCaseInsensitiveContains(query)
+                || (category.focus ?? "").localizedCaseInsensitiveContains(query)
+            return matchesDomain && matchesQuery
         }
+    }
+
+    private var domainOptions: [(id: String, title: String)] {
+        let domains = Set(viewModel.categories.map { $0.domain ?? "unknown" })
+        let ordered = domains.sorted()
+        return [("all", "전체")] + ordered.map { ($0, domainTitle($0)) }
+    }
+
+    private var groupedCategories: [(domain: String, items: [Category])] {
+        let grouped = Dictionary(grouping: filteredCategories) { $0.domain ?? "unknown" }
+        return grouped
+            .map { domain, items in
+                (domain, items.sorted { $0.name < $1.name })
+            }
+            .sorted { domainSortRank($0.domain) < domainSortRank($1.domain) }
     }
 
     var body: some View {
@@ -21,6 +40,29 @@ struct HomeView: View {
                         .ignoresSafeArea()
 
                     VStack(spacing: 12) {
+                        if !domainOptions.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(domainOptions, id: \.id) { domain in
+                                        Button {
+                                            selectedDomain = domain.id
+                                        } label: {
+                                            Text(domain.title)
+                                                .font(.footnote.weight(.semibold))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    Capsule()
+                                                        .fill(selectedDomain == domain.id ? AppTheme.tint.opacity(0.22) : Color.secondary.opacity(0.12))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .padding(.horizontal, 2)
+                            }
+                        }
+
                         if let error = viewModel.errorMessage {
                             Text(error)
                                 .font(.footnote)
@@ -31,32 +73,38 @@ struct HomeView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
-                        List(filteredCategories) { category in
-                            NavigationLink(value: category) {
-                                HStack(spacing: 12) {
-                                    Image(systemName: category.icon)
-                                        .font(.title3)
-                                        .foregroundStyle(AppTheme.tint)
-                                        .frame(width: 32, height: 32)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(AppTheme.tint.opacity(0.14))
+                        List {
+                            ForEach(groupedCategories, id: \.domain) { group in
+                                Section(domainTitle(group.domain)) {
+                                    ForEach(group.items) { category in
+                                        NavigationLink(value: category) {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: category.icon)
+                                                    .font(.title3)
+                                                    .foregroundStyle(AppTheme.tint)
+                                                    .frame(width: 32, height: 32)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 10)
+                                                            .fill(AppTheme.tint.opacity(0.14))
+                                                    )
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    Text(category.name)
+                                                        .font(.headline)
+                                                    Text(category.summary)
+                                                        .font(.subheadline)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            .padding(.vertical, 8)
+                                            .padding(.horizontal, 4)
+                                        }
+                                        .listRowBackground(
+                                            RoundedRectangle(cornerRadius: 14)
+                                                .fill(.ultraThinMaterial)
                                         )
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(category.name)
-                                            .font(.headline)
-                                        Text(category.summary)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
                                     }
                                 }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 4)
                             }
-                            .listRowBackground(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .fill(.ultraThinMaterial)
-                            )
                         }
                         .listStyle(.insetGrouped)
                         .scrollContentBackground(.hidden)
@@ -79,6 +127,30 @@ struct HomeView: View {
             .task {
                 await viewModel.load()
             }
+        }
+    }
+
+    private func domainTitle(_ domain: String) -> String {
+        switch domain {
+        case "people": return "사람/관계"
+        case "sport": return "스포츠"
+        case "market": return "거래/커머스"
+        case "service": return "서비스 의뢰"
+        case "learning": return "학습/클래스"
+        case "job": return "채용/커리어"
+        default: return "기타"
+        }
+    }
+
+    private func domainSortRank(_ domain: String) -> Int {
+        switch domain {
+        case "people": return 0
+        case "sport": return 1
+        case "market": return 2
+        case "service": return 3
+        case "learning": return 4
+        case "job": return 5
+        default: return 99
         }
     }
 }

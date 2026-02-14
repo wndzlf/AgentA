@@ -10,6 +10,8 @@ class Category(BaseModel):
     name: str
     summary: str
     icon: str
+    domain: str = ""
+    focus: str = ""
 
 
 class Recommendation(BaseModel):
@@ -38,6 +40,25 @@ class CategorySchemaResponse(BaseModel):
     mode: str
     required_fields: List[CategoryField] = Field(default_factory=list)
     examples: List[str] = Field(default_factory=list)
+
+
+class RouteRequest(BaseModel):
+    message: str
+    limit: int = 5
+
+
+class RouteCandidate(BaseModel):
+    category_id: str
+    category_name: str
+    domain: str
+    score: float
+    reason: str
+    suggested_mode: str
+
+
+class RouteResponse(BaseModel):
+    selected: Optional[RouteCandidate] = None
+    candidates: List[RouteCandidate] = Field(default_factory=list)
 
 
 class BootstrapResponse(BaseModel):

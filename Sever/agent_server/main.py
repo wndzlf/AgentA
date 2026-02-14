@@ -6,8 +6,25 @@ from fastapi import FastAPI, HTTPException
 
 from .ai_engine import AIEngine
 from .matching import board_count, publish_listing, recommend, seed_mock_board
-from .prompt_packs import CATEGORY_DOMAIN_BY_ID, CATEGORIES, PROMPT_PACKS, category_mode_schema, mode_options, resolve_mode
-from .schemas import AskRequest, AskResponse, BootstrapResponse, Category, CategorySchemaResponse
+from .prompt_packs import (
+    CATEGORY_DEFS,
+    CATEGORY_DOMAIN_BY_ID,
+    PROMPT_PACKS,
+    category_mode_schema,
+    mode_options,
+    resolve_mode,
+    route_categories,
+)
+from .schemas import (
+    AskRequest,
+    AskResponse,
+    BootstrapResponse,
+    Category,
+    CategorySchemaResponse,
+    RouteCandidate,
+    RouteRequest,
+    RouteResponse,
+)
 
 app = FastAPI(title="Agent Match Prototype API", version="0.1.0")
 ai_engine = AIEngine()
@@ -40,7 +57,7 @@ def health() -> Dict[str, str]:
 
 @app.get("/categories", response_model=List[Category])
 def categories() -> List[Category]:
-    return [Category(**item) for item in CATEGORIES]
+    return [Category(**item) for item in CATEGORY_DEFS]
 
 
 @app.get("/categories/{category_id}/bootstrap", response_model=BootstrapResponse)
@@ -66,6 +83,14 @@ def category_schema(category_id: str, mode: Optional[str] = None) -> CategorySch
         raise HTTPException(status_code=404, detail="category not found")
     schema = category_mode_schema(category_id=category_id, mode=mode)
     return CategorySchemaResponse(**schema)
+
+
+@app.post("/agent/route", response_model=RouteResponse)
+def route_agent(req: RouteRequest) -> RouteResponse:
+    candidates_raw = route_categories(req.message, limit=max(1, min(req.limit, 10)))
+    candidates = [RouteCandidate(**item) for item in candidates_raw]
+    selected = candidates[0] if candidates else None
+    return RouteResponse(selected=selected, candidates=candidates)
 
 
 @app.post("/agent/ask", response_model=AskResponse)

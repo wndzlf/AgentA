@@ -108,6 +108,9 @@ struct HomeView: View {
                         }
                         .listStyle(.insetGrouped)
                         .scrollContentBackground(.hidden)
+                        .refreshable {
+                            await viewModel.load()
+                        }
                     }
                     .padding(.horizontal)
 

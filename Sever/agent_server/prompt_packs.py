@@ -545,6 +545,7 @@ def _domain_field_templates(domain: str, mode_id: str) -> List[Dict[str, object]
             {"id": "price", "label": "가격", "hint": "희망 판매가", "keywords": ["만원", "원", "가격", "판매가"]},
             {"id": "condition", "label": "상태", "hint": "사용감/하자", "keywords": ["상태", "신품", "중고", "하자"]},
             {"id": "trade_method", "label": "거래방식", "hint": "직거래/택배", "keywords": ["직거래", "택배", "안전결제"]},
+            {"id": "image", "label": "사진", "hint": "상품 사진 첨부", "keywords": ["사진", "이미지", "첨부"]},
         ]
 
     if domain == "sport":
@@ -560,6 +561,7 @@ def _domain_field_templates(domain: str, mode_id: str) -> List[Dict[str, object]
             {"id": "region", "label": "지역", "hint": "홈 구장", "keywords": ["서울", "경기", "지역", "구장"]},
             {"id": "time", "label": "시간", "hint": "정기 일정", "keywords": ["토", "일", "오전", "오후", "시"]},
             {"id": "level", "label": "실력", "hint": "팀 레벨", "keywords": ["입문", "중", "중상", "상"]},
+            {"id": "image", "label": "팀 사진", "hint": "유니폼/팀 이미지 첨부", "keywords": ["사진", "이미지", "팀"]},
         ]
 
     if domain == "people":
@@ -575,6 +577,7 @@ def _domain_field_templates(domain: str, mode_id: str) -> List[Dict[str, object]
             {"id": "region", "label": "지역", "hint": "활동 지역", "keywords": ["서울", "경기", "지역"]},
             {"id": "time", "label": "시간", "hint": "가능한 시간", "keywords": ["주말", "평일", "저녁", "오전"]},
             {"id": "preference", "label": "원하는 상대", "hint": "원하는 조건", "keywords": ["원하는", "선호", "취향"]},
+            {"id": "image", "label": "프로필 사진", "hint": "아바타/프로필 이미지 첨부", "keywords": ["사진", "프로필", "아바타"]},
         ]
 
     if domain == "service":

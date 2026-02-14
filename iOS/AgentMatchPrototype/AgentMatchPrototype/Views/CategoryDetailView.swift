@@ -1,6 +1,8 @@
 import AVFoundation
+import PhotosUI
 import Speech
 import SwiftUI
+import UIKit
 
 struct CategoryDetailView: View {
     let category: Category
@@ -17,6 +19,8 @@ struct CategoryDetailView: View {
     @State private var isApplyingBootstrap = false
     @State private var highlightedRecommendationIDs: Set<String> = []
     @State private var lastQuery = ""
+    @State private var selectedPhotoItems: [PhotosPickerItem] = []
+    @State private var attachedImages: [UIImage] = []
     @StateObject private var speechController = SpeechInputController()
 
     private var inputPlaceholder: String {
@@ -224,9 +228,36 @@ struct CategoryDetailView: View {
                 .scrollContentBackground(.hidden)
 
                 VStack(alignment: .leading, spacing: 8) {
+                    if !attachedImages.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(attachedImages.enumerated()), id: \.offset) { _, image in
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 54, height: 54)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .stroke(AppTheme.tint.opacity(0.25), lineWidth: 1)
+                                        )
+                                }
+                            }
+                        }
+                    }
+
                     HStack(spacing: 10) {
                         TextField(inputPlaceholder, text: $input)
                             .textFieldStyle(.roundedBorder)
+
+                        PhotosPicker(selection: $selectedPhotoItems, maxSelectionCount: 4, matching: .images) {
+                            Image(systemName: attachedImages.isEmpty ? "photo.circle.fill" : "photo.stack.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(attachedImages.isEmpty ? AppTheme.tint : .green)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isLoading)
+                        .accessibilityLabel("이미지 첨부")
 
                         Button {
                             speechController.toggleListening()
@@ -252,6 +283,12 @@ struct CategoryDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if !attachedImages.isEmpty {
+                        Text("이미지 \(attachedImages.count)장 첨부됨")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding()
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -270,6 +307,9 @@ struct CategoryDetailView: View {
             if !newValue.isEmpty {
                 input = newValue
             }
+        }
+        .onChange(of: selectedPhotoItems.count) { _ in
+            Task { await loadSelectedPhotos() }
         }
         .onDisappear {
             speechController.stopListening()
@@ -291,6 +331,8 @@ struct CategoryDetailView: View {
             recommendations = response.recommendations
             requiredFields = schemaResponse.requiredFields
             exampleRequests = schemaResponse.examples
+            selectedPhotoItems = []
+            attachedImages = []
             highlightedRecommendationIDs.removeAll()
             lastQuery = ""
             messages = ["AI: \(response.welcomeMessage)"]
@@ -311,6 +353,8 @@ struct CategoryDetailView: View {
             recommendations = []
             requiredFields = []
             exampleRequests = []
+            selectedPhotoItems = []
+            attachedImages = []
             highlightedRecommendationIDs.removeAll()
             lastQuery = ""
             isApplyingBootstrap = false
@@ -331,11 +375,19 @@ struct CategoryDetailView: View {
         do {
             let mode = activeModeID.isEmpty ? "find" : activeModeID
             let previousIDs = Set(recommendations.map(\.id))
-            let response = try await APIClient.shared.askAgent(categoryID: category.id, mode: mode, message: text)
+            var requestMessage = text
+            if mode == "publish" && !attachedImages.isEmpty {
+                requestMessage += "\n첨부 이미지: \(attachedImages.count)장"
+            }
+            let response = try await APIClient.shared.askAgent(categoryID: category.id, mode: mode, message: requestMessage)
             if let action = response.actionResult, !action.isEmpty {
                 messages.append("시스템: \(action)")
             }
             messages.append("AI: \(response.assistantMessage)")
+            if mode == "publish" {
+                selectedPhotoItems = []
+                attachedImages = []
+            }
             let currentIDs = response.recommendations.map(\.id)
             let newIDs = Set(currentIDs).subtracting(previousIDs)
             let fallbackHighlights = Set(currentIDs.prefix(3))
@@ -359,10 +411,28 @@ struct CategoryDetailView: View {
     }
 
     private func isFieldSatisfied(_ field: CategoryField) -> Bool {
+        if field.id == "image" {
+            return !attachedImages.isEmpty
+        }
         let text = (input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? lastQuery : input).lowercased()
         guard !text.isEmpty else { return false }
         if field.keywords.isEmpty { return false }
         return field.keywords.contains { text.contains($0.lowercased()) }
+    }
+
+    private func loadSelectedPhotos() async {
+        guard !selectedPhotoItems.isEmpty else {
+            attachedImages = []
+            return
+        }
+        var images: [UIImage] = []
+        for item in selectedPhotoItems.prefix(4) {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let uiImage = UIImage(data: data) {
+                images.append(uiImage)
+            }
+        }
+        attachedImages = images
     }
 }
 

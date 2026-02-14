@@ -10,48 +10,24 @@ targets:
     type: application
     platform: iOS
     sources:
-      - path: AgentMatchPrototype/App
-        type: folder
-        buildPhase: none
-      - path: AgentMatchPrototype/Core
-        type: folder
-        buildPhase: none
-      - path: AgentMatchPrototype/ViewModels
-        type: folder
-        buildPhase: none
-      - path: AgentMatchPrototype/Views
-        type: folder
-        buildPhase: none
-      - path: AgentMatchPrototype/Resources
-        type: folder
-        buildPhase: none
       - path: AgentMatchPrototype/App/AgentMatchPrototypeApp.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Core/APIClient.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Core/AppTheme.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Core/Models.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/ViewModels/HomeViewModel.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Views/HomeView.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Views/QuickAgentView.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Views/CategoryDetailView.swift
         buildPhase: sources
-        group: _BuildFiles
       - path: AgentMatchPrototype/Resources/Assets.xcassets
         buildPhase: resources
-        group: _BuildFiles
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.agentmatch.prototype

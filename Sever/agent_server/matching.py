@@ -131,27 +131,85 @@ CURATED_SEED_BOARD_DATA: Dict[str, List[dict]] = {
 }
 
 
-def _extract_tags(message: str) -> List[str]:
-    tokens = re.findall(r"[0-9A-Za-z가-힣]+", message.lower())
-    stop_words = {"나는", "원해", "찾고", "싶어", "해요", "하고", "싶은", "에서", "으로", "그리고", "입니다"}
-    cleaned = [t for t in tokens if len(t) >= 2 and t not in stop_words]
+STOP_WORDS = {
+    "나는",
+    "원해",
+    "찾고",
+    "싶어",
+    "해요",
+    "하고",
+    "싶은",
+    "에서",
+    "으로",
+    "그리고",
+    "입니다",
+    "주세요",
+    "찾아줘",
+    "찾아주세요",
+    "사고",
+    "팔고",
+    "싶습니다",
+}
+
+
+def _tokenize(text: str) -> List[str]:
+    tokens = re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
     out: List[str] = []
-    for token in cleaned:
+    for token in tokens:
+        if len(token) < 2 or token in STOP_WORDS:
+            continue
         if token not in out:
             out.append(token)
-        if len(out) >= 4:
-            break
+    return out
+
+
+def _extract_query_tokens(message: str) -> List[str]:
+    return _tokenize(message)[:6]
+
+
+def _extract_tags(message: str) -> List[str]:
+    out = _tokenize(message)[:4]
     if not out:
         return ["매칭", "조건"]
     return out
 
 
-def _score(message: str, tags: List[str], from_board: bool = False) -> float:
-    text = message.lower()
-    hits = sum(1 for t in tags if t.lower() in text)
-    base = 0.55 + (0.1 * hits) + (0.12 if from_board else 0.0)
-    noise = random() * 0.2
-    return min(0.98, round(base + noise, 2))
+def _score_item(query_tokens: List[str], item: dict, from_board: bool = False) -> Tuple[float, int]:
+    title = item.get("title", "").lower()
+    subtitle = item.get("subtitle", "").lower()
+    tags = [str(t).lower() for t in item.get("tags", [])]
+
+    hits = 0
+    weighted = 0.0
+    for token in query_tokens:
+        token_hit = False
+        if token in title:
+            weighted += 0.22
+            token_hit = True
+        if token in subtitle:
+            weighted += 0.14
+            token_hit = True
+        if any(token in tag for tag in tags):
+            weighted += 0.18
+            token_hit = True
+        if token_hit:
+            hits += 1
+
+    # 검색어가 있을 때 미일치 항목은 점수를 낮추고, 일치 항목은 강하게 올린다.
+    if query_tokens:
+        base = 0.34 + (0.08 if from_board else 0.0)
+    else:
+        base = 0.56 + (0.1 if from_board else 0.0)
+
+    if hits > 0 and len(query_tokens) > 0:
+        coverage_bonus = 0.12 * (hits / len(query_tokens))
+    else:
+        coverage_bonus = 0.0
+
+    # 동점 정렬 시만 약간의 노이즈를 준다.
+    noise = random() * 0.03
+    score = min(0.99, round(base + weighted + coverage_bonus + noise, 2))
+    return score, hits
 
 
 def _insert_board_item(category_id: str, title: str, subtitle: str, tags: List[str], item_id: Optional[str] = None) -> dict:
@@ -378,32 +436,52 @@ def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "f
     cid = category_id or "friend"
     default_items = _default_candidates_for_category(cid)
     board_items = BOARD.get(cid, [])
-    out: List[Recommendation] = []
+    query_tokens = _extract_query_tokens(message)
+    scored: List[Tuple[Recommendation, int]] = []
 
     for item in board_items:
-        out.append(
-            Recommendation(
-                id=item["id"],
-                title=item["title"],
-                subtitle=item["subtitle"],
-                tags=item["tags"],
-                score=_score(message, item["tags"], from_board=True),
+        score, hits = _score_item(query_tokens, item, from_board=True)
+        scored.append(
+            (
+                Recommendation(
+                    id=item["id"],
+                    title=item["title"],
+                    subtitle=item["subtitle"],
+                    tags=item["tags"],
+                    score=score,
+                ),
+                hits,
             )
         )
 
     if not board_items:
         for idx, item in enumerate(default_items, start=1):
-            out.append(
-                Recommendation(
-                    id=f"{cid}-default-{idx}",
-                    title=item["title"],
-                    subtitle=item["subtitle"],
-                    tags=item["tags"],
-                    score=_score(message, item["tags"]),
+            item_for_score = {
+                "title": item["title"],
+                "subtitle": item["subtitle"],
+                "tags": item["tags"],
+            }
+            score, hits = _score_item(query_tokens, item_for_score, from_board=False)
+            scored.append(
+                (
+                    Recommendation(
+                        id=f"{cid}-default-{idx}",
+                        title=item["title"],
+                        subtitle=item["subtitle"],
+                        tags=item["tags"],
+                        score=score,
+                    ),
+                    hits,
                 )
             )
 
-    out.sort(key=lambda x: x.score, reverse=True)
+    if query_tokens:
+        matched_only = [row for row in scored if row[1] > 0]
+        if matched_only:
+            scored = matched_only
+
+    scored.sort(key=lambda row: (row[1], row[0].score), reverse=True)
+    out = [row[0] for row in scored]
     if mode == "publish":
         return out[:5]
     return out[:8]

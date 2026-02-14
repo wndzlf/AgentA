@@ -6,11 +6,25 @@ from fastapi import FastAPI, HTTPException
 
 from .ai_engine import AIEngine
 from .matching import board_count, publish_listing, recommend, seed_mock_board
-from .prompt_packs import CATEGORIES, PROMPT_PACKS, mode_options, resolve_mode
+from .prompt_packs import CATEGORY_DOMAIN_BY_ID, CATEGORIES, PROMPT_PACKS, mode_options, resolve_mode
 from .schemas import AskRequest, AskResponse, BootstrapResponse, Category
 
 app = FastAPI(title="Agent Match Prototype API", version="0.1.0")
 ai_engine = AIEngine()
+
+
+def _market_find_summary(user_message: str, recs: List) -> str:
+    if not recs:
+        return (
+            f"'{user_message}' 조건과 직접 일치하는 매물을 찾지 못했어요. "
+            "예산/지역/상태 조건을 추가하면 더 정확하게 찾아드릴게요."
+        )
+
+    lines = [f"'{user_message}' 기준으로 관련 매물 {len(recs)}건을 찾았어요."]
+    for idx, rec in enumerate(recs[:3], start=1):
+        lines.append(f"{idx}) {rec.title} - {rec.subtitle}")
+    lines.append("원하면 위 후보 중 비교할 2개를 지정해 주세요.")
+    return "\n".join(lines)
 
 
 @app.on_event("startup")
@@ -47,7 +61,7 @@ def bootstrap(category_id: str, mode: Optional[str] = None) -> BootstrapResponse
 
 @app.post("/agent/ask", response_model=AskResponse)
 def ask_agent(req: AskRequest) -> AskResponse:
-    mode_id, mode_meta = resolve_mode(req.category_id, req.mode)
+    mode_id, _ = resolve_mode(req.category_id, req.mode)
     action_result: Optional[str] = None
     action_context: Optional[str] = None
 
@@ -60,13 +74,28 @@ def ask_agent(req: AskRequest) -> AskResponse:
             f"태그: {', '.join(listing.tags)}"
         )
 
-    assistant = ai_engine.reply(
-        category_id=req.category_id,
-        message=req.message,
-        mode=mode_id,
-        action_context=action_context,
-    )
     recs = recommend(category_id=req.category_id, message=req.message, mode=mode_id)
+    recommendation_context: Optional[str] = None
+    if recs:
+        top = recs[:3]
+        lines = [f"추천 결과 총 {len(recs)}건"]
+        for idx, rec in enumerate(top, start=1):
+            lines.append(
+                f"{idx}. {rec.title} | {rec.subtitle} | 태그: {', '.join(rec.tags)} | 점수: {int(rec.score * 100)}"
+            )
+        recommendation_context = "\n".join(lines)
+
+    category_domain = CATEGORY_DOMAIN_BY_ID.get(req.category_id or "friend", "people")
+    if mode_id == "find" and category_domain == "market":
+        assistant = _market_find_summary(req.message, recs)
+    else:
+        assistant = ai_engine.reply(
+            category_id=req.category_id,
+            message=req.message,
+            mode=mode_id,
+            action_context=action_context,
+            recommendation_context=recommendation_context,
+        )
     if action_result and "등록" not in assistant:
         assistant = f"{action_result}\n{assistant}"
     return AskResponse(

@@ -275,11 +275,12 @@ def _make_modes(name: str, domain: str, focus: str) -> Dict[str, Dict[str, str]]
                 "description": f"{name} 조건 기반 탐색",
                 "prompt_hint": f"{focus_hint} 상품명/예산/상태/거래조건을 입력해주세요.",
                 "welcome": f"{name} 매물 찾기 모드입니다. 원하는 조건을 알려주세요.",
-                "system_prompt": (
-                    f"{name} 거래 에이전트처럼 응답하세요. {focus_hint} "
-                    "거래 확정을 위해 필요한 추가 질문 1개를 하세요."
-                ),
-            },
+            "system_prompt": (
+                f"{name} 거래 에이전트처럼 응답하세요. {focus_hint} "
+                "추천 후보가 주어지면 후보 수와 상위 2~3개를 구체적으로 설명하고, "
+                "거래 확정을 위해 필요한 추가 질문 1개를 하세요."
+            ),
+        },
             "publish": {
                 "title": "매물 올리기",
                 "description": f"{name} 판매/양도 등록",

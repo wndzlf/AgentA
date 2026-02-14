@@ -13,6 +13,8 @@ struct CategoryDetailView: View {
     @State private var recommendations: [Recommendation] = []
     @State private var isLoading = false
     @State private var isApplyingBootstrap = false
+    @State private var highlightedRecommendationIDs: Set<String> = []
+    @State private var lastQuery = ""
     @StateObject private var speechController = SpeechInputController()
 
     private var inputPlaceholder: String {
@@ -65,8 +67,41 @@ struct CategoryDetailView: View {
                     .padding(.horizontal)
                 }
 
+                if isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("AI가 조건을 분석하고 후보를 찾는 중...")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                } else if !lastQuery.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.tint)
+                        Text("AI 추천 기준: \"\(lastQuery)\"")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                }
+
                 List(recommendations) { item in
+                    let isHighlighted = highlightedRecommendationIDs.contains(item.id)
                     VStack(alignment: .leading, spacing: 6) {
+                        if isHighlighted {
+                            Label("AI가 방금 찾은 추천", systemImage: "sparkles")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.tint)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(AppTheme.tint.opacity(0.12), in: Capsule())
+                        }
+
                         HStack {
                             Text(item.title).font(.headline)
                             Spacer()
@@ -97,7 +132,13 @@ struct CategoryDetailView: View {
                     .listRowBackground(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(isHighlighted ? AppTheme.tint.opacity(0.75) : .clear, lineWidth: 1.5)
+                            )
                     )
+                    .scaleEffect(isHighlighted ? 1.01 : 1.0)
+                    .animation(.easeOut(duration: 0.22), value: isHighlighted)
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
@@ -165,6 +206,8 @@ struct CategoryDetailView: View {
             }
             promptHint = response.promptHint
             recommendations = response.recommendations
+            highlightedRecommendationIDs.removeAll()
+            lastQuery = ""
             messages = ["AI: \(response.welcomeMessage)"]
             isApplyingBootstrap = false
         } catch {
@@ -181,6 +224,8 @@ struct CategoryDetailView: View {
             promptHint = "서버 연결 없이 데모 모드"
             messages = ["AI: 원하는 조건을 말해주면 추천을 보여줄게요."]
             recommendations = []
+            highlightedRecommendationIDs.removeAll()
+            lastQuery = ""
             isApplyingBootstrap = false
         }
     }
@@ -191,18 +236,35 @@ struct CategoryDetailView: View {
         speechController.stopListening()
         speechController.clearTranscript()
         input = ""
+        lastQuery = text
         messages.append("나: \(text)")
         isLoading = true
         defer { isLoading = false }
 
         do {
             let mode = activeModeID.isEmpty ? "find" : activeModeID
+            let previousIDs = Set(recommendations.map(\.id))
             let response = try await APIClient.shared.askAgent(categoryID: category.id, mode: mode, message: text)
             if let action = response.actionResult, !action.isEmpty {
                 messages.append("시스템: \(action)")
             }
             messages.append("AI: \(response.assistantMessage)")
-            recommendations = response.recommendations
+            let currentIDs = response.recommendations.map(\.id)
+            let newIDs = Set(currentIDs).subtracting(previousIDs)
+            let fallbackHighlights = Set(currentIDs.prefix(3))
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                recommendations = response.recommendations
+                highlightedRecommendationIDs = newIDs.isEmpty ? fallbackHighlights : newIDs
+            }
+
+            Task {
+                try? await Task.sleep(nanoseconds: 2_300_000_000)
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        highlightedRecommendationIDs.removeAll()
+                    }
+                }
+            }
         } catch {
             messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
         }

@@ -4,11 +4,6 @@ struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @State private var query = ""
     @State private var showQuickAgent = false
-    @State private var fabBasePosition: CGPoint = .zero
-    @State private var fabDragOffset: CGSize = .zero
-
-    private let fabSize: CGFloat = 62
-    private let fabMargin: CGFloat = 18
 
     private var filteredCategories: [Category] {
         guard !query.isEmpty else { return viewModel.categories }
@@ -22,11 +17,17 @@ struct HomeView: View {
         NavigationStack {
             GeometryReader { proxy in
                 ZStack {
+                    AppTheme.pageBackground
+                        .ignoresSafeArea()
+
                     VStack(spacing: 12) {
                         if let error = viewModel.errorMessage {
                             Text(error)
                                 .font(.footnote)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(.orange.opacity(0.9))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
@@ -35,7 +36,12 @@ struct HomeView: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: category.icon)
                                         .font(.title3)
-                                        .frame(width: 28)
+                                        .foregroundStyle(AppTheme.tint)
+                                        .frame(width: 32, height: 32)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 10)
+                                                .fill(AppTheme.tint.opacity(0.14))
+                                        )
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(category.name)
                                             .font(.headline)
@@ -44,14 +50,22 @@ struct HomeView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 4)
                             }
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(.ultraThinMaterial)
+                            )
                         }
-                        .listStyle(.plain)
+                        .listStyle(.insetGrouped)
+                        .scrollContentBackground(.hidden)
                     }
                     .padding(.horizontal)
 
-                    floatingAgentButton(in: proxy.size)
+                    DraggableAgentButton(containerSize: proxy.size) {
+                        showQuickAgent = true
+                    }
                 }
             }
             .navigationTitle("Agent Match")
@@ -67,81 +81,113 @@ struct HomeView: View {
             }
         }
     }
+}
 
-    private func floatingAgentButton(in size: CGSize) -> some View {
-        let defaultPoint = defaultFABPosition(in: size)
-        let anchor = fabBasePosition == .zero ? defaultPoint : fabBasePosition
-        let current = clampedPoint(
+private struct DraggableAgentButton: View {
+    let containerSize: CGSize
+    let action: () -> Void
+
+    @State private var basePosition: CGPoint = .zero
+    @GestureState private var dragTranslation: CGSize = .zero
+
+    private let buttonSize: CGFloat = 62
+    private let margin: CGFloat = 18
+    private let tapThreshold: CGFloat = 8
+
+    var body: some View {
+        let defaultPoint = defaultPosition(in: containerSize)
+        let anchor = basePosition == .zero ? defaultPoint : basePosition
+        let currentPoint = clampedPoint(
             CGPoint(
-                x: anchor.x + fabDragOffset.width,
-                y: anchor.y + fabDragOffset.height
+                x: anchor.x + dragTranslation.width,
+                y: anchor.y + dragTranslation.height
             ),
-            in: size
+            in: containerSize
         )
 
-        return Button {
-            showQuickAgent = true
-        } label: {
-            Image(systemName: "bolt.fill")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: fabSize, height: fabSize)
-                .background(Circle().fill(Color.blue))
-                .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 3)
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .position(current)
-        .onAppear {
-            if fabBasePosition == .zero {
-                fabBasePosition = defaultPoint
-            }
-        }
-        .onChange(of: size) { newSize in
-            if fabBasePosition == .zero {
-                fabBasePosition = defaultFABPosition(in: newSize)
-            } else {
-                fabBasePosition = clampedPoint(fabBasePosition, in: newSize)
-            }
-        }
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    fabDragOffset = value.translation
-                }
-                .onEnded { value in
-                    let start = fabBasePosition == .zero ? defaultPoint : fabBasePosition
-                    fabBasePosition = clampedPoint(
-                        CGPoint(
-                            x: start.x + value.translation.width,
-                            y: start.y + value.translation.height
-                        ),
-                        in: size
+        Image(systemName: "bolt.fill")
+            .font(.title3.weight(.bold))
+            .foregroundStyle(.white)
+            .frame(width: buttonSize, height: buttonSize)
+            .background(
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [AppTheme.tint, AppTheme.tintSoft],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                    fabDragOffset = .zero
+            )
+            .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 3)
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
+            )
+            .contentShape(Circle())
+            .position(currentPoint)
+            .onAppear {
+                if basePosition == .zero {
+                    basePosition = defaultPoint
                 }
-        )
-        .accessibilityLabel("에이전트에게 바로 물어보기")
+            }
+            .onChange(of: containerSize.width) { _ in
+                clampBasePosition(in: containerSize)
+            }
+            .onChange(of: containerSize.height) { _ in
+                clampBasePosition(in: containerSize)
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($dragTranslation) { value, state, _ in
+                        state = value.translation
+                    }
+                    .onEnded { value in
+                        let start = basePosition == .zero ? defaultPoint : basePosition
+                        let endPoint = clampedPoint(
+                            CGPoint(
+                                x: start.x + value.translation.width,
+                                y: start.y + value.translation.height
+                            ),
+                            in: containerSize
+                        )
+                        basePosition = endPoint
+
+                        let movedDistance = (
+                            value.translation.width * value.translation.width +
+                            value.translation.height * value.translation.height
+                        ).squareRoot()
+                        if movedDistance < tapThreshold {
+                            action()
+                        }
+                    }
+            )
+            .accessibilityLabel("에이전트에게 바로 물어보기")
     }
 
-    private func defaultFABPosition(in size: CGSize) -> CGPoint {
+    private func defaultPosition(in size: CGSize) -> CGPoint {
         CGPoint(
-            x: size.width - (fabSize / 2) - fabMargin,
-            y: size.height - (fabSize / 2) - fabMargin
+            x: size.width - (buttonSize / 2) - margin,
+            y: size.height - (buttonSize / 2) - margin
         )
     }
 
     private func clampedPoint(_ point: CGPoint, in size: CGSize) -> CGPoint {
-        let minX = (fabSize / 2) + fabMargin
-        let maxX = size.width - (fabSize / 2) - fabMargin
-        let minY = (fabSize / 2) + fabMargin
-        let maxY = size.height - (fabSize / 2) - fabMargin
+        let minX = (buttonSize / 2) + margin
+        let maxX = size.width - (buttonSize / 2) - margin
+        let minY = (buttonSize / 2) + margin
+        let maxY = size.height - (buttonSize / 2) - margin
         return CGPoint(
             x: min(max(point.x, minX), maxX),
             y: min(max(point.y, minY), maxY)
         )
+    }
+
+    private func clampBasePosition(in size: CGSize) {
+        if basePosition == .zero {
+            basePosition = defaultPosition(in: size)
+            return
+        }
+        basePosition = clampedPoint(basePosition, in: size)
     }
 }

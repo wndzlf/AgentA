@@ -20,17 +20,28 @@ class Recommendation(BaseModel):
     score: float
 
 
+class ModeOption(BaseModel):
+    id: str
+    title: str
+    description: str
+
+
 class BootstrapResponse(BaseModel):
     welcome_message: str
     prompt_hint: str
+    active_mode: str
+    modes: List[ModeOption]
     recommendations: List[Recommendation]
 
 
 class AskRequest(BaseModel):
     category_id: Optional[str] = None
+    mode: Optional[str] = "find"
     message: str
 
 
 class AskResponse(BaseModel):
     assistant_message: str
+    active_mode: str
+    action_result: Optional[str] = None
     recommendations: List[Recommendation]

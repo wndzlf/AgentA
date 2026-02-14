@@ -12,6 +12,7 @@
 		2549A801B067EE2D8EFBA0B8 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46E3673DC054326BE958400B /* Models.swift */; };
 		AEDEAEFFF808B66C17059A01 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 864DC707C0A7DA70453BEC05 /* Assets.xcassets */; };
 		B78E6EB6CE1262FEFB114AD0 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD82C4F33357D6F979F7349E /* HomeViewModel.swift */; };
+		BC417C532893BFC11F6EEA60 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93595838B89C869866083E28 /* AppTheme.swift */; };
 		CF3DA0299FFE799473742CA4 /* QuickAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9264265A84F57AC36C89AC2F /* QuickAgentView.swift */; };
 		D0B46CB18A66FADDF9877563 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291095C5260F50CA8420FBA1 /* HomeView.swift */; };
 		F8C927E9F1C132BA23328DB0 /* AgentMatchPrototypeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2F9F8B4190719167E5B640 /* AgentMatchPrototypeApp.swift */; };
@@ -29,6 +30,7 @@
 		779452F07CBDF100EAF17208 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = APIClient.swift; path = AgentMatchPrototype/Core/APIClient.swift; sourceTree = "<group>"; };
 		864DC707C0A7DA70453BEC05 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = AgentMatchPrototype/Resources/Assets.xcassets; sourceTree = "<group>"; };
 		9264265A84F57AC36C89AC2F /* QuickAgentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuickAgentView.swift; path = AgentMatchPrototype/Views/QuickAgentView.swift; sourceTree = "<group>"; };
+		93595838B89C869866083E28 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppTheme.swift; path = AgentMatchPrototype/Core/AppTheme.swift; sourceTree = "<group>"; };
 		9F501474AA1514FD5A481BBD /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Resources; path = AgentMatchPrototype/Resources; sourceTree = SOURCE_ROOT; };
 		BD82C4F33357D6F979F7349E /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeViewModel.swift; path = AgentMatchPrototype/ViewModels/HomeViewModel.swift; sourceTree = "<group>"; };
 		F47F28E19C7E17C019CFFA8B /* Views */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Views; path = AgentMatchPrototype/Views; sourceTree = SOURCE_ROOT; };
@@ -61,6 +63,7 @@
 			children = (
 				4F2F9F8B4190719167E5B640 /* AgentMatchPrototypeApp.swift */,
 				779452F07CBDF100EAF17208 /* APIClient.swift */,
+				93595838B89C869866083E28 /* AppTheme.swift */,
 				864DC707C0A7DA70453BEC05 /* Assets.xcassets */,
 				2B8FAB83A8CA8164F7F9F27C /* CategoryDetailView.swift */,
 				291095C5260F50CA8420FBA1 /* HomeView.swift */,
@@ -143,6 +146,7 @@
 			files = (
 				13F5BEC746332767E733718D /* APIClient.swift in Sources */,
 				F8C927E9F1C132BA23328DB0 /* AgentMatchPrototypeApp.swift in Sources */,
+				BC417C532893BFC11F6EEA60 /* AppTheme.swift in Sources */,
 				1E4F50309B806211425AFB31 /* CategoryDetailView.swift in Sources */,
 				D0B46CB18A66FADDF9877563 /* HomeView.swift in Sources */,
 				B78E6EB6CE1262FEFB114AD0 /* HomeViewModel.swift in Sources */,

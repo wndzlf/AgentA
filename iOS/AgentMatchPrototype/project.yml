@@ -31,6 +31,9 @@ targets:
       - path: AgentMatchPrototype/Core/APIClient.swift
         buildPhase: sources
         group: _BuildFiles
+      - path: AgentMatchPrototype/Core/AppTheme.swift
+        buildPhase: sources
+        group: _BuildFiles
       - path: AgentMatchPrototype/Core/Models.swift
         buildPhase: sources
         group: _BuildFiles

@@ -8,27 +8,36 @@ struct QuickAgentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(messages, id: \.self) { msg in
-                            Text(msg)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(.secondarySystemBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+            ZStack {
+                AppTheme.pageBackground
+                    .ignoresSafeArea()
 
-                HStack {
-                    TextField("질문 입력", text: $input)
-                        .textFieldStyle(.roundedBorder)
-                    Button("전송") {
-                        Task { await send() }
+                VStack {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(messages, id: \.self) { msg in
+                                Text(msg)
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(bubbleColor(for: msg))
+                                    )
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+
+                    HStack {
+                        TextField("질문 입력", text: $input)
+                            .textFieldStyle(.roundedBorder)
+                        Button("전송") {
+                            Task { await send() }
+                        }
+                        .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
                 }
             }
             .padding()
@@ -49,10 +58,14 @@ struct QuickAgentView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let response = try await APIClient.shared.askAgent(categoryID: nil, message: text)
+            let response = try await APIClient.shared.askAgent(categoryID: nil, mode: "find", message: text)
             messages.append("AI: \(response.assistantMessage)")
         } catch {
             messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
         }
+    }
+
+    private func bubbleColor(for message: String) -> Color {
+        message.hasPrefix("나:") ? AppTheme.bubbleUser : AppTheme.bubbleAI
     }
 }

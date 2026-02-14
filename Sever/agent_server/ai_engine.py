@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from .prompt_packs import PROMPT_PACKS
+from .prompt_packs import CATEGORY_NAME_BY_ID, resolve_mode
 
 
 class AIEngine:
@@ -17,27 +17,47 @@ class AIEngine:
         # 첫 요청(콜드 스타트)은 시간이 걸릴 수 있어 여유 있게 설정.
         self.timeout = float(os.getenv("OLLAMA_TIMEOUT", "30"))
 
-    def reply(self, category_id: Optional[str], message: str) -> str:
+    def reply(
+        self,
+        category_id: Optional[str],
+        message: str,
+        mode: Optional[str] = "find",
+        action_context: Optional[str] = None,
+    ) -> str:
         # 1) 로컬 무료 AI(Ollama) 우선
-        text = self._reply_with_ollama(category_id, message)
+        text = self._reply_with_ollama(category_id, message, mode, action_context)
         if text:
             return text
         # 2) 실패 시 안전한 fallback
-        return self._fallback(category_id, message)
+        return self._fallback(category_id, mode)
 
-    def _reply_with_ollama(self, category_id: Optional[str], message: str) -> Optional[str]:
+    def _reply_with_ollama(
+        self,
+        category_id: Optional[str],
+        message: str,
+        mode: Optional[str],
+        action_context: Optional[str],
+    ) -> Optional[str]:
         category_key = category_id or "friend"
-        pack = PROMPT_PACKS.get(category_key, PROMPT_PACKS["friend"])
+        mode_id, mode_meta = resolve_mode(category_key, mode)
+        category_name = CATEGORY_NAME_BY_ID.get(category_key, "친구 만들기")
+        user_message = message
+        if action_context:
+            user_message = f"{message}\n\n[ActionResult]\n{action_context}"
         system_prompt = (
-            "You are a category agent. Keep response concise in Korean. "
-            "Ask one clarifying question and summarize preference in one sentence. "
-            f"Category hint: {pack['prompt_hint']}"
+            "너는 카테고리 전용 AI 에이전트다. 한국어로 간결히 답해라. "
+            f"카테고리: {category_name}. "
+            f"현재 모드: {mode_meta['title']}({mode_id}). "
+            f"모드 설명: {mode_meta['description']}. "
+            f"입력 힌트: {mode_meta['prompt_hint']}. "
+            f"모드 지시: {mode_meta['system_prompt']} "
+            "응답 형식: 1) 핵심요약 1문장 2) 다음 행동 1~2개 3) 필요한 추가질문 1개."
         )
         payload: Dict[str, Any] = {
             "model": self.ollama_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
+                {"role": "user", "content": user_message},
             ],
             "stream": False,
         }
@@ -56,10 +76,10 @@ class AIEngine:
         except Exception:
             return None
 
-    def _fallback(self, category_id: Optional[str], message: str) -> str:
+    def _fallback(self, category_id: Optional[str], mode: Optional[str]) -> str:
         cid = category_id or "friend"
-        pack = PROMPT_PACKS.get(cid, PROMPT_PACKS["friend"])
+        _, mode_meta = resolve_mode(cid, mode)
         return (
-            f"요청을 반영해 {pack['welcome']} 우선 조건을 더 정밀하게 맞추려면 "
-            "지역/시간/예산(또는 선호 스타일) 1가지를 추가로 알려주세요."
+            f"{mode_meta['welcome']} 요청을 반영 중입니다. "
+            "정밀 매칭을 위해 지역/시간/예산 중 한 가지를 추가로 알려주세요."
         )

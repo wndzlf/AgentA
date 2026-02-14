@@ -16,7 +16,23 @@ cd /Users/user/AgentA/Sever
 - 무료 모델(`llama3.2:1b`) 자동 다운로드
 - FastAPI 서버 실행 (`127.0.0.1:8000`)
 
-## 2) 수동 실행
+## 2) 백그라운드 실행 (앱 테스트용)
+
+앱에서 "서버 연결 실패"가 자주 뜨면, 아래처럼 데몬으로 올려두고 Xcode를 실행하세요.
+
+```bash
+cd /Users/user/AgentA/Sever
+./start_api_daemon.sh
+```
+
+중지:
+
+```bash
+cd /Users/user/AgentA/Sever
+./stop_api_daemon.sh
+```
+
+## 3) 수동 실행
 
 ```bash
 cd /Users/user/AgentA/Sever
@@ -32,7 +48,7 @@ OLLAMA_MODEL=llama3.2:1b uvicorn agent_server.main:app --reload --host 127.0.0.1
 curl http://127.0.0.1:8000/health
 ```
 
-## 3) 무료 AI 연결
+## 4) 무료 AI 연결
 
 로컬에서 Ollama를 실행하면 무료 모델로 응답합니다.
 Ollama가 없거나 실패하면 서버는 자동으로 fallback 응답을 사용합니다.
@@ -43,11 +59,25 @@ Ollama가 없거나 실패하면 서버는 자동으로 fallback 응답을 사�
 - `OLLAMA_MODEL` (기본값: `llama3.2:1b`)
 - `OLLAMA_TIMEOUT` (기본값: `30`)
 
-## 4) 주요 API
+## 5) 목데이터 시드
+
+서버 시작 시 카테고리별 목데이터가 자동으로 로드됩니다.
+
+필요하면 수동으로 다시 시드:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/dev/seed?reset=true"
+```
+
+- `reset=true`: 기존 등록 데이터 초기화 후 목데이터 재적재
+- `reset=false`: 없는 시드만 추가
+
+## 6) 주요 API
 
 - `GET /categories`
-- `GET /categories/{category_id}/bootstrap`
-- `POST /agent/ask`
+- `GET /categories/{category_id}/bootstrap?mode=find|publish`
+- `POST /agent/ask` (`mode=find|publish`)
+- `POST /dev/seed?reset=true|false`
 
 샘플 요청:
 

@@ -173,6 +173,23 @@ STOP_WORDS = {
     "싶습니다",
 }
 
+COMPOUND_SUFFIX_HINTS = [
+    "가방",
+    "지갑",
+    "시계",
+    "신발",
+    "벨트",
+    "자켓",
+    "코트",
+    "반지",
+    "목걸이",
+    "팔찌",
+    "향수",
+    "스위치",
+    "아이패드",
+    "아이폰",
+]
+
 
 def _tokenize(text: str) -> List[str]:
     tokens = re.findall(r"[0-9A-Za-z가-힣]+", text.lower())
@@ -185,8 +202,24 @@ def _tokenize(text: str) -> List[str]:
     return out
 
 
+def _expand_compound_tokens(tokens: List[str]) -> List[str]:
+    out: List[str] = []
+    for token in tokens:
+        if token not in out:
+            out.append(token)
+        for suffix in COMPOUND_SUFFIX_HINTS:
+            if token.endswith(suffix) and len(token) > len(suffix) + 1:
+                prefix = token[: -len(suffix)]
+                for extra in (prefix, suffix):
+                    if len(extra) >= 2 and extra not in STOP_WORDS and extra not in out:
+                        out.append(extra)
+    return out
+
+
 def _extract_query_tokens(message: str) -> List[str]:
-    return _tokenize(message)[:6]
+    base = _tokenize(message)
+    expanded = _expand_compound_tokens(base)
+    return expanded[:8]
 
 
 def _extract_tags(message: str) -> List[str]:
@@ -617,6 +650,12 @@ def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "f
         matched_only = [row for row in scored if row[1] > 0]
         if matched_only:
             scored = matched_only
+        else:
+            # 거래/쇼핑 도메인은 미일치 fallback 추천을 노출하지 않는다.
+            # (예: "코치가방" 검색 시 무관한 명품 후보 노출 방지)
+            domain = CATEGORY_DOMAIN_BY_ID.get(cid, "people")
+            if domain == "market" and mode != "publish":
+                return []
 
     scored.sort(key=lambda row: (row[1], row[0].score), reverse=True)
     out = [row[0] for row in scored]

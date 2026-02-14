@@ -378,8 +378,12 @@ struct CategoryDetailView: View {
             if activeModeID.isEmpty {
                 activeModeID = "find"
             }
-            promptHint = "서버 연결 없이 데모 모드"
-            messages = ["AI: 원하는 조건을 말해주면 추천을 보여줄게요."]
+            let fallbackMode = (mode?.isEmpty == false ? mode! : activeModeID)
+            if activeModeID != fallbackMode {
+                activeModeID = fallbackMode
+            }
+            promptHint = localPromptHint(for: activeModeID)
+            messages = [localWelcomeMessage(for: activeModeID)]
             recommendations = []
             actionByRecommendationID = [:]
             requiredFields = []
@@ -465,6 +469,33 @@ struct CategoryDetailView: View {
     private func refreshActions() async {
         let actions = (try? await APIClient.shared.fetchActions(categoryID: category.id)) ?? []
         actionByRecommendationID = reduceActions(actions)
+    }
+
+    private func localPromptHint(for mode: String) -> String {
+        if mode == "publish" {
+            return "서버 연결 없이 데모 모드 · 등록에 필요한 정보를 입력하세요."
+        }
+        return "서버 연결 없이 데모 모드 · 조건을 입력하면 추천 흐름을 미리 볼 수 있어요."
+    }
+
+    private func localWelcomeMessage(for mode: String) -> String {
+        if mode == "publish" {
+            switch category.id {
+            case "luxury":
+                return "AI: 올리고 싶은 명품 가방이 있나요? 브랜드, 모델, 상태, 가격, 인증 정보를 알려주세요."
+            case "trade":
+                return "AI: 올리고 싶은 판매 물건이 있나요? 상품명, 상태, 가격, 거래방식을 알려주세요."
+            case "dating":
+                return "AI: 소개팅 프로필을 올려볼까요? 나의 성향, 선호 상대, 활동 지역을 알려주세요."
+            case "friend":
+                return "AI: 친구 만들기 프로필을 올려볼까요? 관심사, 성향, 활동 시간대를 알려주세요."
+            case "soccer", "futsal":
+                return "AI: 팀 정보를 올려볼까요? 팀 레벨, 활동 지역, 가능한 시간대를 알려주세요."
+            default:
+                return "AI: 올리고 싶은 항목이 있나요? 핵심 정보(제목/조건/가격 또는 일정)를 알려주세요."
+            }
+        }
+        return "AI: 원하는 조건을 말해주면 추천을 보여줄게요."
     }
 
     private func statusLabel(for status: String) -> String {

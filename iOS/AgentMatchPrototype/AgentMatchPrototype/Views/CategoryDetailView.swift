@@ -25,6 +25,16 @@ struct CategoryDetailView: View {
         activeModeID == "publish" ? "등록" : "전송"
     }
 
+    private var displayedRecommendations: [Recommendation] {
+        recommendations.sorted { lhs, rhs in
+            let lAI = highlightedRecommendationIDs.contains(lhs.id)
+            let rAI = highlightedRecommendationIDs.contains(rhs.id)
+            if lAI != rAI { return lAI && !rAI }
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.id < rhs.id
+        }
+    }
+
     var body: some View {
         ZStack {
             AppTheme.pageBackground
@@ -90,7 +100,7 @@ struct CategoryDetailView: View {
                     .padding(.horizontal, 18)
                 }
 
-                List(recommendations) { item in
+                List(displayedRecommendations) { item in
                     let isHighlighted = highlightedRecommendationIDs.contains(item.id)
                     VStack(alignment: .leading, spacing: 6) {
                         if isHighlighted {
@@ -103,6 +113,14 @@ struct CategoryDetailView: View {
                         }
 
                         HStack {
+                            if isHighlighted {
+                                Text("AI")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(AppTheme.tint, in: Capsule())
+                            }
                             Text(item.title).font(.headline)
                             Spacer()
                             Text(String(format: "%.0f%%", item.score * 100))
@@ -255,15 +273,6 @@ struct CategoryDetailView: View {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                 recommendations = response.recommendations
                 highlightedRecommendationIDs = newIDs.isEmpty ? fallbackHighlights : newIDs
-            }
-
-            Task {
-                try? await Task.sleep(nanoseconds: 2_300_000_000)
-                await MainActor.run {
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        highlightedRecommendationIDs.removeAll()
-                    }
-                }
             }
         } catch {
             messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")

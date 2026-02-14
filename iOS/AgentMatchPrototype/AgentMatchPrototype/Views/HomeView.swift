@@ -322,7 +322,6 @@ private struct MyPageView: View {
     let userName: String
 
     @AppStorage("app_language_code") private var appLanguageCode = "ko"
-    @State private var todayOnly = true
     @State private var listings: [MyListingItem] = []
     @State private var isLoading = false
     @State private var errorMessage = ""
@@ -334,13 +333,6 @@ private struct MyPageView: View {
     var body: some View {
         VStack(spacing: 12) {
             headerCard
-
-            Picker("scope", selection: $todayOnly) {
-                Text(tr("오늘", "Today")).tag(true)
-                Text(tr("전체", "All")).tag(false)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
 
             if isLoading {
                 ProgressView(tr("불러오는 중...", "Loading..."))
@@ -441,9 +433,6 @@ private struct MyPageView: View {
         .task {
             await load()
         }
-        .onChange(of: todayOnly) { _ in
-            Task { await load() }
-        }
     }
 
     private var headerCard: some View {
@@ -474,7 +463,7 @@ private struct MyPageView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            listings = try await APIClient.shared.fetchMyListings(email: userEmail, todayOnly: todayOnly)
+            listings = try await APIClient.shared.fetchMyListings(email: userEmail, todayOnly: false)
             errorMessage = ""
         } catch {
             errorMessage = tr("내 등록글을 불러오지 못했습니다.", "Failed to load your listings.")
@@ -489,12 +478,8 @@ private struct MyPageView: View {
         guard let date else { return iso }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: isEnglish ? "en_US" : "ko_KR")
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        if todayOnly {
-            return formatter.string(from: date)
-        }
         formatter.dateStyle = .short
+        formatter.timeStyle = .short
         return formatter.string(from: date)
     }
 }

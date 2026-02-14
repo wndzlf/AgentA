@@ -752,6 +752,7 @@ def publish_listing(
     message: str,
     owner_name: Optional[str] = None,
     owner_email: Optional[str] = None,
+    target_recommendation_id: Optional[str] = None,
 ) -> Tuple[Recommendation, bool]:
     cid = category_id or "friend"
     tags = _extract_tags(message)
@@ -762,6 +763,25 @@ def publish_listing(
     if len(summary) > 42:
         summary = summary[:42] + "..."
     normalized_owner_email = (owner_email or "").strip().lower()
+
+    # 타겟 ID가 있으면 해당 글만 업데이트한다.
+    if normalized_owner_email and target_recommendation_id:
+        for idx, existing in enumerate(BOARD.get(cid, [])):
+            if existing.get("id") != target_recommendation_id:
+                continue
+            if (existing.get("owner_email") or "").lower() != normalized_owner_email:
+                raise ValueError("cannot edit listing owned by another user")
+            existing["title"] = f"{title} 수정됨"
+            existing["subtitle"] = summary
+            existing["tags"] = tags[:4] if tags else existing.get("tags", ["매칭", "조건"])
+            existing["detail"] = f"{summary}\n등록자: {owner_name or existing.get('owner_name', '익명')}\n태그: {', '.join(tags)}"
+            if owner_name:
+                existing["owner_name"] = owner_name
+            existing["updated_at"] = _now_iso()
+            BOARD[cid].pop(idx)
+            BOARD[cid].insert(0, existing)
+            return _recommendation_from_item(existing, score=0.99), True
+        raise ValueError("target listing not found")
 
     # AI 업서트: 같은 카테고리에서 내가 올린 최신 글을 음성/텍스트로 다시 말하면 수정으로 처리.
     if normalized_owner_email:

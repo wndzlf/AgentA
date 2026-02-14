@@ -159,6 +159,7 @@ struct AgentRequest: Codable {
     let message: String
     let userEmail: String?
     let userName: String?
+    let targetRecommendationID: String?
 
     enum CodingKeys: String, CodingKey {
         case categoryID = "category_id"
@@ -166,6 +167,7 @@ struct AgentRequest: Codable {
         case message
         case userEmail = "user_email"
         case userName = "user_name"
+        case targetRecommendationID = "target_recommendation_id"
     }
 }
 

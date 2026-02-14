@@ -66,7 +66,8 @@ final class APIClient {
         mode: String? = nil,
         message: String,
         userEmail: String? = nil,
-        userName: String? = nil
+        userName: String? = nil,
+        targetRecommendationID: String? = nil
     ) async throws -> AgentResponse {
         guard let url = makeURL(path: "/agent/ask") else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
@@ -78,7 +79,8 @@ final class APIClient {
                 mode: mode,
                 message: message,
                 userEmail: userEmail,
-                userName: userName
+                userName: userName,
+                targetRecommendationID: targetRecommendationID
             )
         )
         let (data, response) = try await URLSession.shared.data(for: request)

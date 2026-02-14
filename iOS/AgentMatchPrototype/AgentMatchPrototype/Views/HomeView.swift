@@ -326,6 +326,7 @@ private struct MyPageView: View {
     @State private var listings: [MyListingItem] = []
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var selectedListing: MyListingItem?
 
     private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
     private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
@@ -391,6 +392,15 @@ private struct MyPageView: View {
                                 }
                             }
                         }
+                        HStack {
+                            Spacer()
+                            Button {
+                                selectedListing = item
+                            } label: {
+                                Label(tr("AI 편집", "Edit with AI"), systemImage: "sparkles")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                     .padding(.vertical, 6)
                     .listRowBackground(
@@ -408,6 +418,26 @@ private struct MyPageView: View {
         .background(AppTheme.pageBackground.ignoresSafeArea())
         .navigationTitle(tr("마이 페이지", "My Page"))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(
+            isPresented: Binding(
+                get: { selectedListing != nil },
+                set: { isPresented in
+                    if !isPresented { selectedListing = nil }
+                }
+            )
+        ) {
+            if let listing = selectedListing {
+                MyListingAIEditView(
+                    listing: listing,
+                    userEmail: userEmail,
+                    userName: userName
+                ) {
+                    Task { await load() }
+                }
+            } else {
+                EmptyView()
+            }
+        }
         .task {
             await load()
         }
@@ -425,8 +455,8 @@ private struct MyPageView: View {
                 .foregroundStyle(.secondary)
             Text(
                 tr(
-                    "AI 에이전트가 올린 글을 수정하려면 해당 카테고리의 올리기 모드에서 다시 말해보세요.",
-                    "To update your posts, go to the category's Post mode and speak again."
+                    "각 글의 'AI 편집' 버튼으로 들어가서 말하듯 수정 요청하면, AI가 같은 글을 업데이트합니다.",
+                    "Tap 'Edit with AI' on any listing to request a natural-language update."
                 )
             )
             .font(.caption)
@@ -466,6 +496,131 @@ private struct MyPageView: View {
         }
         formatter.dateStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+private struct MyListingAIEditView: View {
+    let listing: MyListingItem
+    let userEmail: String
+    let userName: String
+    let onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
+    @State private var instruction = ""
+    @State private var isLoading = false
+    @State private var infoMessage = ""
+
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
+    private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(listing.recommendation.title)
+                        .font(.headline)
+                    Text(listing.recommendation.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                    if let detail = listing.recommendation.detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(4)
+                    }
+                }
+                .padding(12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(tr("AI에게 수정 요청", "Ask AI to update this post"))
+                        .font(.headline)
+                    Text(
+                        tr(
+                            "원하는 수정 내용을 말하듯 입력하면, AI 에이전트가 필요한 정보를 보완해 같은 글을 업데이트합니다.",
+                            "Describe changes in natural language. The AI agent will enrich missing fields and update the same listing."
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                    TextEditor(text: $instruction)
+                        .frame(minHeight: 110)
+                        .padding(8)
+                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+
+                    HStack {
+                        Button {
+                            instruction = defaultInstruction()
+                        } label: {
+                            Label(tr("예시 채우기", "AutoFill"), systemImage: "wand.and.stars")
+                        }
+                        .buttonStyle(.bordered)
+
+                        Spacer()
+
+                        Button {
+                            Task { await saveByAI() }
+                        } label: {
+                            if isLoading {
+                                ProgressView()
+                            } else {
+                                Text(tr("AI로 수정 저장", "Save with AI"))
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isLoading || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .padding(12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+                if !infoMessage.isEmpty {
+                    Text(infoMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+        }
+        .background(AppTheme.pageBackground.ignoresSafeArea())
+        .navigationTitle(tr("내 글 AI 편집", "AI Edit"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func defaultInstruction() -> String {
+        if isEnglish {
+            return "Update this listing with clearer conditions and recent availability. Keep the core intent but improve details."
+        }
+        return "이 글을 최신 조건으로 수정해줘. 핵심 의도는 유지하고, 지역/시간/가격(또는 선호 조건)을 더 명확하게 보완해줘."
+    }
+
+    private func saveByAI() async {
+        let text = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let base = isEnglish
+                ? "Current post summary: \(listing.recommendation.subtitle)\nUpdate request: \(text)"
+                : "기존 글 요약: \(listing.recommendation.subtitle)\n수정 요청: \(text)"
+            _ = try await APIClient.shared.askAgent(
+                categoryID: listing.categoryID,
+                mode: "publish",
+                message: base,
+                userEmail: userEmail,
+                userName: userName.isEmpty ? nil : userName,
+                targetRecommendationID: listing.recommendation.id
+            )
+            onSaved()
+            infoMessage = tr("AI가 글을 수정했습니다.", "AI updated your listing.")
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            dismiss()
+        } catch {
+            infoMessage = tr("수정에 실패했습니다. 서버 상태를 확인해 주세요.", "Update failed. Check server status.")
+        }
     }
 }
 

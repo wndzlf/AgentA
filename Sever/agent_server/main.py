@@ -277,12 +277,16 @@ def ask_agent(req: AskRequest, lang: Optional[str] = None) -> AskResponse:
     action_context: Optional[str] = None
 
     if mode_id == "publish":
-        listing, updated = publish_listing(
-            category_id=req.category_id,
-            message=req.message,
-            owner_name=req.user_name,
-            owner_email=req.user_email,
-        )
+        try:
+            listing, updated = publish_listing(
+                category_id=req.category_id,
+                message=req.message,
+                owner_name=req.user_name,
+                owner_email=req.user_email,
+                target_recommendation_id=req.target_recommendation_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         if language == "ko":
             action_result = f"{'수정 완료' if updated else '등록 완료'}: {listing.title}"
         else:

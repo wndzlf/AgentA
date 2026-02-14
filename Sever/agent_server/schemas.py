@@ -80,6 +80,7 @@ class AskRequest(BaseModel):
     message: str
     user_email: Optional[str] = None
     user_name: Optional[str] = None
+    target_recommendation_id: Optional[str] = None
 
 
 class AskResponse(BaseModel):

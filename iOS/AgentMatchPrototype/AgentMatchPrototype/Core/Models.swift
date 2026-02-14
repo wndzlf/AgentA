@@ -21,6 +21,27 @@ struct AgentMode: Identifiable, Codable, Hashable {
     let description: String
 }
 
+struct CategoryField: Identifiable, Codable, Hashable {
+    let id: String
+    let label: String
+    let hint: String
+    let keywords: [String]
+}
+
+struct CategorySchemaResponse: Codable {
+    let categoryID: String
+    let mode: String
+    let requiredFields: [CategoryField]
+    let examples: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case categoryID = "category_id"
+        case mode
+        case requiredFields = "required_fields"
+        case examples
+    }
+}
+
 struct AgentResponse: Codable {
     let assistantMessage: String
     let activeMode: String?

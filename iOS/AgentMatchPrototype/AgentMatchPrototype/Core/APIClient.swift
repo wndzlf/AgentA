@@ -35,6 +35,19 @@ final class APIClient {
         return try JSONDecoder().decode(BootstrapResponse.self, from: data)
     }
 
+    func fetchCategorySchema(categoryID: String, mode: String? = nil) async throws -> CategorySchemaResponse {
+        var components = URLComponents(string: "\(baseURL)/categories/\(categoryID)/schema")
+        if let mode, !mode.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "mode", value: mode)]
+        }
+        guard let url = components?.url else { throw APIError.invalidURL }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        return try JSONDecoder().decode(CategorySchemaResponse.self, from: data)
+    }
+
     func askAgent(categoryID: String?, mode: String? = nil, message: String) async throws -> AgentResponse {
         guard let url = URL(string: "\(baseURL)/agent/ask") else { throw APIError.invalidURL }
         var request = URLRequest(url: url)

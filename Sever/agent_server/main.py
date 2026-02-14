@@ -6,8 +6,8 @@ from fastapi import FastAPI, HTTPException
 
 from .ai_engine import AIEngine
 from .matching import board_count, publish_listing, recommend, seed_mock_board
-from .prompt_packs import CATEGORY_DOMAIN_BY_ID, CATEGORIES, PROMPT_PACKS, mode_options, resolve_mode
-from .schemas import AskRequest, AskResponse, BootstrapResponse, Category
+from .prompt_packs import CATEGORY_DOMAIN_BY_ID, CATEGORIES, PROMPT_PACKS, category_mode_schema, mode_options, resolve_mode
+from .schemas import AskRequest, AskResponse, BootstrapResponse, Category, CategorySchemaResponse
 
 app = FastAPI(title="Agent Match Prototype API", version="0.1.0")
 ai_engine = AIEngine()
@@ -57,6 +57,15 @@ def bootstrap(category_id: str, mode: Optional[str] = None) -> BootstrapResponse
         modes=mode_options(category_id),
         recommendations=recs,
     )
+
+
+@app.get("/categories/{category_id}/schema", response_model=CategorySchemaResponse)
+def category_schema(category_id: str, mode: Optional[str] = None) -> CategorySchemaResponse:
+    pack = PROMPT_PACKS.get(category_id)
+    if not pack:
+        raise HTTPException(status_code=404, detail="category not found")
+    schema = category_mode_schema(category_id=category_id, mode=mode)
+    return CategorySchemaResponse(**schema)
 
 
 @app.post("/agent/ask", response_model=AskResponse)

@@ -11,6 +11,8 @@ struct CategoryDetailView: View {
     @State private var input = ""
     @State private var messages: [String] = []
     @State private var recommendations: [Recommendation] = []
+    @State private var requiredFields: [CategoryField] = []
+    @State private var exampleRequests: [String] = []
     @State private var isLoading = false
     @State private var isApplyingBootstrap = false
     @State private var highlightedRecommendationIDs: Set<String> = []
@@ -60,6 +62,66 @@ struct CategoryDetailView: View {
                         .padding(.vertical, 10)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
+                }
+
+                if !requiredFields.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(requiredFields) { field in
+                                let satisfied = isFieldSatisfied(field)
+                                HStack(spacing: 5) {
+                                    Image(systemName: satisfied ? "checkmark.circle.fill" : "circle")
+                                        .font(.caption)
+                                    Text(field.label)
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .foregroundStyle(satisfied ? .green : .secondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(satisfied ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
+                                )
+                                .overlay(alignment: .topTrailing) {
+                                    if !satisfied {
+                                        Text(field.hint)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(.ultraThinMaterial, in: Capsule())
+                                            .offset(x: 5, y: -6)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+
+                if !exampleRequests.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(exampleRequests.prefix(3), id: \.self) { example in
+                                Button {
+                                    input = example
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "sparkles")
+                                            .font(.caption)
+                                        Text(example)
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 7)
+                                    .background(AppTheme.tint.opacity(0.12), in: Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
                 }
 
                 ScrollView {
@@ -216,7 +278,10 @@ struct CategoryDetailView: View {
 
     private func bootstrap(mode: String?) async {
         do {
-            let response = try await APIClient.shared.fetchBootstrap(categoryID: category.id, mode: mode)
+            async let boot = APIClient.shared.fetchBootstrap(categoryID: category.id, mode: mode)
+            async let schema = APIClient.shared.fetchCategorySchema(categoryID: category.id, mode: mode)
+            let response = try await boot
+            let schemaResponse = try await schema
             isApplyingBootstrap = true
             modes = response.modes
             if activeModeID != response.activeMode {
@@ -224,6 +289,8 @@ struct CategoryDetailView: View {
             }
             promptHint = response.promptHint
             recommendations = response.recommendations
+            requiredFields = schemaResponse.requiredFields
+            exampleRequests = schemaResponse.examples
             highlightedRecommendationIDs.removeAll()
             lastQuery = ""
             messages = ["AI: \(response.welcomeMessage)"]
@@ -242,6 +309,8 @@ struct CategoryDetailView: View {
             promptHint = "서버 연결 없이 데모 모드"
             messages = ["AI: 원하는 조건을 말해주면 추천을 보여줄게요."]
             recommendations = []
+            requiredFields = []
+            exampleRequests = []
             highlightedRecommendationIDs.removeAll()
             lastQuery = ""
             isApplyingBootstrap = false
@@ -287,6 +356,13 @@ struct CategoryDetailView: View {
             return AppTheme.bubbleAI
         }
         return Color(.secondarySystemBackground)
+    }
+
+    private func isFieldSatisfied(_ field: CategoryField) -> Bool {
+        let text = (input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? lastQuery : input).lowercased()
+        guard !text.isEmpty else { return false }
+        if field.keywords.isEmpty { return false }
+        return field.keywords.contains { text.contains($0.lowercased()) }
     }
 }
 

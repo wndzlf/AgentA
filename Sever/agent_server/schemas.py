@@ -26,6 +26,20 @@ class ModeOption(BaseModel):
     description: str
 
 
+class CategoryField(BaseModel):
+    id: str
+    label: str
+    hint: str
+    keywords: List[str] = Field(default_factory=list)
+
+
+class CategorySchemaResponse(BaseModel):
+    category_id: str
+    mode: str
+    required_fields: List[CategoryField] = Field(default_factory=list)
+    examples: List[str] = Field(default_factory=list)
+
+
 class BootstrapResponse(BaseModel):
     welcome_message: str
     prompt_hint: str

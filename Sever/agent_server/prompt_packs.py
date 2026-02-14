@@ -395,3 +395,167 @@ def mode_options(category_id: Optional[str]) -> List[Dict[str, str]]:
             }
         )
     return out
+
+
+def _domain_field_templates(domain: str, mode_id: str) -> List[Dict[str, object]]:
+    if domain == "market":
+        if mode_id == "find":
+            return [
+                {"id": "item", "label": "상품명", "hint": "찾는 물건", "keywords": ["상품", "모델", "브랜드", "item"]},
+                {"id": "budget", "label": "예산", "hint": "희망 가격대", "keywords": ["만원", "원", "예산", "가격"]},
+                {"id": "condition", "label": "상태", "hint": "신품/중고/하자", "keywords": ["상태", "신품", "중고", "하자"]},
+                {"id": "region", "label": "거래지역", "hint": "거래 가능한 위치", "keywords": ["서울", "경기", "지역", "직거래"]},
+            ]
+        return [
+            {"id": "item", "label": "상품명", "hint": "판매할 물건", "keywords": ["상품", "모델", "브랜드", "item"]},
+            {"id": "price", "label": "가격", "hint": "희망 판매가", "keywords": ["만원", "원", "가격", "판매가"]},
+            {"id": "condition", "label": "상태", "hint": "사용감/하자", "keywords": ["상태", "신품", "중고", "하자"]},
+            {"id": "trade_method", "label": "거래방식", "hint": "직거래/택배", "keywords": ["직거래", "택배", "안전결제"]},
+        ]
+
+    if domain == "sport":
+        if mode_id == "find":
+            return [
+                {"id": "region", "label": "지역", "hint": "경기 장소", "keywords": ["서울", "경기", "지역", "구장"]},
+                {"id": "time", "label": "시간", "hint": "가능 시간대", "keywords": ["토", "일", "오전", "오후", "시"]},
+                {"id": "level", "label": "실력", "hint": "입문/중/상", "keywords": ["입문", "중", "중상", "상"]},
+                {"id": "format", "label": "형식", "hint": "인원/경기형식", "keywords": ["5:5", "8:8", "11:11", "인원"]},
+            ]
+        return [
+            {"id": "team_info", "label": "팀정보", "hint": "팀 스타일/인원", "keywords": ["팀", "인원", "포지션"]},
+            {"id": "region", "label": "지역", "hint": "홈 구장", "keywords": ["서울", "경기", "지역", "구장"]},
+            {"id": "time", "label": "시간", "hint": "정기 일정", "keywords": ["토", "일", "오전", "오후", "시"]},
+            {"id": "level", "label": "실력", "hint": "팀 레벨", "keywords": ["입문", "중", "중상", "상"]},
+        ]
+
+    if domain == "people":
+        if mode_id == "find":
+            return [
+                {"id": "persona", "label": "원하는 성향", "hint": "원하는 상대 성향", "keywords": ["성향", "취향", "성격"]},
+                {"id": "region", "label": "지역", "hint": "만날 수 있는 위치", "keywords": ["서울", "경기", "지역"]},
+                {"id": "time", "label": "시간", "hint": "가능한 시간대", "keywords": ["주말", "평일", "오전", "저녁"]},
+                {"id": "goal", "label": "목적", "hint": "친구/소개팅/모임 목적", "keywords": ["친구", "소개팅", "모임", "목적"]},
+            ]
+        return [
+            {"id": "self_intro", "label": "나의 성향", "hint": "나를 소개하는 문장", "keywords": ["나는", "성향", "성격"]},
+            {"id": "region", "label": "지역", "hint": "활동 지역", "keywords": ["서울", "경기", "지역"]},
+            {"id": "time", "label": "시간", "hint": "가능한 시간", "keywords": ["주말", "평일", "저녁", "오전"]},
+            {"id": "preference", "label": "원하는 상대", "hint": "원하는 조건", "keywords": ["원하는", "선호", "취향"]},
+        ]
+
+    if domain == "service":
+        if mode_id == "find":
+            return [
+                {"id": "request", "label": "요청내용", "hint": "필요한 작업", "keywords": ["요청", "작업", "의뢰"]},
+                {"id": "budget", "label": "예산", "hint": "예상 비용", "keywords": ["예산", "만원", "원"]},
+                {"id": "timeline", "label": "일정", "hint": "마감/진행 기간", "keywords": ["마감", "일정", "기간"]},
+                {"id": "channel", "label": "방식", "hint": "온라인/오프라인", "keywords": ["온라인", "오프라인", "방문"]},
+            ]
+        return [
+            {"id": "service", "label": "제공 서비스", "hint": "할 수 있는 업무", "keywords": ["서비스", "제공", "업무"]},
+            {"id": "price", "label": "단가", "hint": "견적 기준", "keywords": ["단가", "견적", "만원", "원"]},
+            {"id": "timeline", "label": "가능 일정", "hint": "진행 가능 기간", "keywords": ["일정", "기간", "납기"]},
+            {"id": "proof", "label": "근거", "hint": "경험/포트폴리오", "keywords": ["경험", "포트폴리오", "레퍼런스"]},
+        ]
+
+    if domain == "learning":
+        if mode_id == "find":
+            return [
+                {"id": "topic", "label": "주제", "hint": "학습하고 싶은 내용", "keywords": ["주제", "과목", "언어"]},
+                {"id": "goal", "label": "목표", "hint": "점수/완성 목표", "keywords": ["목표", "점수", "완성"]},
+                {"id": "time", "label": "시간", "hint": "학습 가능 시간", "keywords": ["주말", "평일", "오전", "저녁"]},
+                {"id": "channel", "label": "방식", "hint": "온라인/오프라인", "keywords": ["온라인", "오프라인"]},
+            ]
+        return [
+            {"id": "topic", "label": "주제", "hint": "모집 주제", "keywords": ["주제", "과목", "언어"]},
+            {"id": "schedule", "label": "일정", "hint": "모임 일정", "keywords": ["일정", "주", "요일", "시"]},
+            {"id": "capacity", "label": "정원", "hint": "모집 인원", "keywords": ["정원", "인원", "명"]},
+            {"id": "channel", "label": "방식", "hint": "진행 방식", "keywords": ["온라인", "오프라인"]},
+        ]
+
+    # domain == "job"
+    if mode_id == "find":
+        return [
+            {"id": "role", "label": "직무", "hint": "원하는 직무", "keywords": ["직무", "개발", "디자인", "마케팅"]},
+            {"id": "career", "label": "경력", "hint": "경력 연차", "keywords": ["경력", "년차"]},
+            {"id": "condition", "label": "조건", "hint": "연봉/근무형태", "keywords": ["연봉", "복지", "리모트"]},
+            {"id": "region", "label": "근무지", "hint": "근무 위치", "keywords": ["서울", "경기", "리모트", "하이브리드"]},
+        ]
+    return [
+        {"id": "role", "label": "직무", "hint": "채용/등록 직무", "keywords": ["직무", "개발", "디자인", "마케팅"]},
+        {"id": "requirement", "label": "필수역량", "hint": "필요 역량", "keywords": ["필수", "역량", "스킬"]},
+        {"id": "condition", "label": "조건", "hint": "연봉/계약형태", "keywords": ["연봉", "계약", "복지"]},
+        {"id": "location", "label": "위치", "hint": "근무 장소", "keywords": ["서울", "경기", "리모트"]},
+    ]
+
+
+CATEGORY_SCHEMA_OVERRIDES: Dict[str, Dict[str, Dict[str, object]]] = {
+    "trade": {
+        "find": {
+            "examples": [
+                "닌텐도 스위치 OLED, 35만원 이하, 서울 직거래 원해요.",
+                "아이패드 에어 5, 상태 A 이상, 50만원대 찾고 있어요.",
+            ]
+        },
+        "publish": {
+            "examples": [
+                "닌텐도 스위치 OLED 풀박, 32만원, 잠실 직거래 가능해요.",
+                "소니 WH-1000XM5 상태 A, 28만원, 택배/직거래 모두 가능해요.",
+            ]
+        },
+    },
+    "luxury": {
+        "find": {
+            "examples": [
+                "샤넬 WOC, 400만원 이하, 인보이스 있는 매물 찾고 싶어요.",
+                "루이비통 네오노에, 상태 A급, 서울 직거래 원해요.",
+            ]
+        },
+        "publish": {
+            "examples": [
+                "루이비통 네오노에, 인보이스 포함, 178만원, 성수 직거래 가능.",
+                "까르띠에 탱크 머스트, 보증서 있음, 420만원, 상태 A입니다.",
+            ]
+        },
+    },
+    "soccer": {
+        "find": {
+            "examples": [
+                "송파, 토요일 오전 10시, 11:11, 실력 중상 상대팀 찾습니다.",
+                "강남, 평일 야간 8:8, 매너 좋은 팀 원해요.",
+            ]
+        },
+        "publish": {
+            "examples": [
+                "FC 송파, 일요일 08시, 11:11, 실력 중, 상대팀 모집합니다.",
+                "한강 나이트팀, 수요일 21시, 8:8, 고정 매칭 원해요.",
+            ]
+        },
+    },
+}
+
+
+def category_mode_schema(category_id: Optional[str], mode: Optional[str]) -> Dict[str, object]:
+    cid = category_id or "friend"
+    mode_id, mode_meta = resolve_mode(cid, mode)
+    domain = CATEGORY_DOMAIN_BY_ID.get(cid, "people")
+    name = CATEGORY_NAME_BY_ID.get(cid, "카테고리")
+
+    fields = _domain_field_templates(domain, mode_id)
+    examples = [
+        f"{name}에서 조건을 구체적으로 입력해 매칭 성공률을 높여보세요.",
+        f"{name} {mode_meta['title']} 모드에서 지역/시간/핵심 조건을 함께 입력해보세요.",
+    ]
+
+    override = CATEGORY_SCHEMA_OVERRIDES.get(cid, {}).get(mode_id, {})
+    if "fields" in override:
+        fields = override["fields"]  # type: ignore[assignment]
+    if "examples" in override:
+        examples = list(override["examples"])  # type: ignore[arg-type]
+
+    return {
+        "category_id": cid,
+        "mode": mode_id,
+        "required_fields": fields,
+        "examples": examples,
+    }

@@ -2,14 +2,11 @@
 
 ## 실행
 
-1. 서버 먼저 실행
+1. 서버 먼저 실행 (무료 AI 포함)
 
 ```bash
 cd /Users/user/AgentA/Sever
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn agent_server.main:app --reload --host 0.0.0.0 --port 8000
+./run_local_ai.sh
 ```
 
 2. iOS 프로젝트 열기
@@ -27,6 +24,7 @@ uvicorn agent_server.main:app --reload --host 0.0.0.0 --port 8000
 
 - 현재 API 주소는 `http://127.0.0.1:8000` (시뮬레이터 기준)
 - 실기기 테스트 시 서버 주소를 Mac IP로 변경 필요
+- Ollama 첫 응답은 모델 로딩 때문에 10초 이상 걸릴 수 있음
 
 ## 빌드 에러 체크
 

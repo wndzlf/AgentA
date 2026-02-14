@@ -52,7 +52,7 @@ struct QuickAgentView: View {
             let response = try await APIClient.shared.askAgent(categoryID: nil, message: text)
             messages.append("AI: \(response.assistantMessage)")
         } catch {
-            messages.append("AI: 서버 연결 실패. Sever 서버를 실행한 뒤 다시 시도해주세요.")
+            messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
         }
     }
 }

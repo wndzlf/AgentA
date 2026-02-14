@@ -12,8 +12,10 @@ from .prompt_packs import PROMPT_PACKS
 class AIEngine:
     def __init__(self) -> None:
         self.ollama_base = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        self.timeout = float(os.getenv("OLLAMA_TIMEOUT", "8"))
+        # 기본값은 로컬 무료 사용에 유리한 경량 모델로 둔다.
+        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+        # 첫 요청(콜드 스타트)은 시간이 걸릴 수 있어 여유 있게 설정.
+        self.timeout = float(os.getenv("OLLAMA_TIMEOUT", "30"))
 
     def reply(self, category_id: Optional[str], message: str) -> str:
         # 1) 로컬 무료 AI(Ollama) 우선

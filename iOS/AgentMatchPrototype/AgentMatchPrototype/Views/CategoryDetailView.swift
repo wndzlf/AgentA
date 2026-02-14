@@ -106,7 +106,7 @@ struct CategoryDetailView: View {
             messages.append("AI: \(response.assistantMessage)")
             recommendations = response.recommendations
         } catch {
-            messages.append("AI: 서버 연결 실패")
+            messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
         }
     }
 }

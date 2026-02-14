@@ -8,18 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		13F5BEC746332767E733718D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 779452F07CBDF100EAF17208 /* APIClient.swift */; };
-		1E387B5A642F14548C7AEE68 /* Views in Resources */ = {isa = PBXBuildFile; fileRef = F47F28E19C7E17C019CFFA8B /* Views */; };
 		1E4F50309B806211425AFB31 /* CategoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8FAB83A8CA8164F7F9F27C /* CategoryDetailView.swift */; };
 		2549A801B067EE2D8EFBA0B8 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46E3673DC054326BE958400B /* Models.swift */; };
-		920D54BF216666653E425EFE /* App in Resources */ = {isa = PBXBuildFile; fileRef = 33B53042C8BACF2F275722B2 /* App */; };
 		AEDEAEFFF808B66C17059A01 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 864DC707C0A7DA70453BEC05 /* Assets.xcassets */; };
 		B78E6EB6CE1262FEFB114AD0 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD82C4F33357D6F979F7349E /* HomeViewModel.swift */; };
 		CF3DA0299FFE799473742CA4 /* QuickAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9264265A84F57AC36C89AC2F /* QuickAgentView.swift */; };
-		CFCB4F669BCAEF764F780CCE /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 9F501474AA1514FD5A481BBD /* Resources */; };
 		D0B46CB18A66FADDF9877563 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291095C5260F50CA8420FBA1 /* HomeView.swift */; };
-		F0C19A21A2FAAFD51E811AA8 /* ViewModels in Resources */ = {isa = PBXBuildFile; fileRef = 0FE2334A9A9D1FAC0B5FD2E1 /* ViewModels */; };
 		F8C927E9F1C132BA23328DB0 /* AgentMatchPrototypeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F2F9F8B4190719167E5B640 /* AgentMatchPrototypeApp.swift */; };
-		FF3DB4624E3C54EFFA1FDA30 /* Core in Resources */ = {isa = PBXBuildFile; fileRef = 01ACBE773572F8AE1E52C3F2 /* Core */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -105,6 +100,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					AB1E54DB2AA0D3E4FB72DEB3 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = AAE9B280512B173496109246 /* Build configuration list for PBXProject "AgentMatchPrototype" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -130,12 +130,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				920D54BF216666653E425EFE /* App in Resources */,
 				AEDEAEFFF808B66C17059A01 /* Assets.xcassets in Resources */,
-				FF3DB4624E3C54EFFA1FDA30 /* Core in Resources */,
-				CFCB4F669BCAEF764F780CCE /* Resources in Resources */,
-				F0C19A21A2FAAFD51E811AA8 /* ViewModels in Resources */,
-				1E387B5A642F14548C7AEE68 /* Views in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -226,7 +221,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentMatchPrototype/Resources/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -238,6 +236,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentmatch.prototype;
 				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -302,7 +301,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
+				"CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]" = NO;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AgentMatchPrototype/Resources/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -314,6 +316,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentmatch.prototype;
 				SDKROOT = iphoneos;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;

@@ -12,14 +12,19 @@ targets:
     sources:
       - path: AgentMatchPrototype/App
         type: folder
+        buildPhase: none
       - path: AgentMatchPrototype/Core
         type: folder
+        buildPhase: none
       - path: AgentMatchPrototype/ViewModels
         type: folder
+        buildPhase: none
       - path: AgentMatchPrototype/Views
         type: folder
+        buildPhase: none
       - path: AgentMatchPrototype/Resources
         type: folder
+        buildPhase: none
       - path: AgentMatchPrototype/App/AgentMatchPrototypeApp.swift
         buildPhase: sources
         group: _BuildFiles
@@ -47,6 +52,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.agentmatch.prototype
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: NO
+        CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: AgentMatchPrototype/Resources/Info.plist
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

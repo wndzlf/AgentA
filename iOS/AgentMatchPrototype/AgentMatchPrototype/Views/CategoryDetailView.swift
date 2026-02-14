@@ -44,7 +44,7 @@ struct CategoryDetailView: View {
     }
 
     private var displayedMessages: [String] {
-        Array(messages.suffix(5))
+        Array(messages.suffix(1))
     }
 
     var body: some View {
@@ -92,17 +92,6 @@ struct CategoryDetailView: View {
                                     RoundedRectangle(cornerRadius: 12)
                                         .fill(satisfied ? Color.green.opacity(0.12) : Color.secondary.opacity(0.12))
                                 )
-                                .overlay(alignment: .topTrailing) {
-                                    if !satisfied {
-                                        Text(field.hint)
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(.ultraThinMaterial, in: Capsule())
-                                            .offset(x: 5, y: -6)
-                                    }
-                                }
                             }
                         }
                         .padding(.horizontal, 16)
@@ -134,23 +123,22 @@ struct CategoryDetailView: View {
                     }
                 }
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(displayedMessages, id: \.self) { msg in
-                            Text(msg)
-                                .lineLimit(msg.hasPrefix("AI:") ? 3 : 2)
-                                .truncationMode(.tail)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(bubbleColor(for: msg))
-                                )
-                        }
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(displayedMessages, id: \.self) { msg in
+                        Text(msg)
+                            .font(.footnote)
+                            .lineLimit(4)
+                            .truncationMode(.tail)
+                            .padding(9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(bubbleColor(for: msg))
+                            )
                     }
-                    .padding(.horizontal)
                 }
-                .frame(maxHeight: 190)
+                .padding(.horizontal)
+                .frame(maxHeight: 96)
 
                 if isLoading {
                     HStack(spacing: 8) {
@@ -411,7 +399,7 @@ struct CategoryDetailView: View {
         speechController.clearTranscript()
         input = ""
         lastQuery = text
-        messages.append("나: \(text)")
+        messages = ["나: \(text)"]
         isLoading = true
         defer { isLoading = false }
 
@@ -423,10 +411,7 @@ struct CategoryDetailView: View {
                 requestMessage += "\n첨부 이미지: \(attachedImages.count)장"
             }
             let response = try await APIClient.shared.askAgent(categoryID: category.id, mode: mode, message: requestMessage)
-            if let action = response.actionResult, !action.isEmpty {
-                messages.append("시스템: \(action)")
-            }
-            messages.append("AI: \(response.assistantMessage)")
+            messages = ["AI: \(response.assistantMessage)"]
             if mode == "publish" {
                 selectedPhotoItems = []
                 attachedImages = []
@@ -440,7 +425,7 @@ struct CategoryDetailView: View {
             }
             await refreshActions()
         } catch {
-            messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
+            messages = ["AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요."]
         }
     }
 

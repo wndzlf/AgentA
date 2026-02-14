@@ -596,7 +596,13 @@ struct CategoryDetailView: View {
     }
 }
 
-private struct RecommendationDetailView: View {
+struct RecommendationDetailEditContext {
+    let userEmail: String
+    let userName: String
+    let onSaved: () -> Void
+}
+
+struct RecommendationDetailView: View {
     @Environment(\.openURL) private var openURL
     @AppStorage("current_user_email") private var currentUserEmail = ""
     @AppStorage("current_user_name") private var currentUserName = ""
@@ -608,12 +614,16 @@ private struct RecommendationDetailView: View {
     let recommendation: Recommendation
     let currentAction: MatchAction?
     let onUpdated: (MatchAction) -> Void
+    let editContext: RecommendationDetailEditContext?
 
     @State private var localRecommendation: Recommendation
     @State private var localAction: MatchAction?
     @State private var note = ""
     @State private var isLoading = false
     @State private var infoMessage = ""
+    @State private var editInstruction = ""
+    @State private var editInfoMessage = ""
+    @State private var isEditSaving = false
 
     init(
         categoryID: String,
@@ -621,7 +631,8 @@ private struct RecommendationDetailView: View {
         categoryName: String,
         recommendation: Recommendation,
         currentAction: MatchAction?,
-        onUpdated: @escaping (MatchAction) -> Void
+        onUpdated: @escaping (MatchAction) -> Void,
+        editContext: RecommendationDetailEditContext? = nil
     ) {
         self.categoryID = categoryID
         self.categoryDomain = categoryDomain
@@ -629,6 +640,7 @@ private struct RecommendationDetailView: View {
         self.recommendation = recommendation
         self.currentAction = currentAction
         self.onUpdated = onUpdated
+        self.editContext = editContext
         _localRecommendation = State(initialValue: recommendation)
         _localAction = State(initialValue: currentAction)
     }
@@ -636,12 +648,16 @@ private struct RecommendationDetailView: View {
     private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
     private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
     private var canSendRequest: Bool { !currentUserEmail.isEmpty }
+    private var viewerEmail: String {
+        !currentUserEmail.isEmpty ? currentUserEmail : (editContext?.userEmail ?? "")
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 imageSection
                 infoSection
+                aiEditSection
                 variationSection
                 actionSection
                 contactSection
@@ -784,6 +800,60 @@ private struct RecommendationDetailView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
     }
 
+    @ViewBuilder
+    private var aiEditSection: some View {
+        if let editContext {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(tr("AI 편집", "AI Edit"))
+                    .font(.headline)
+                Text(
+                    tr(
+                        "내가 올린 글입니다. 수정할 내용을 말하듯 입력하면 AI가 같은 글을 업데이트합니다.",
+                        "This is your listing. Describe updates naturally and AI will update this exact post."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+                TextEditor(text: $editInstruction)
+                    .frame(minHeight: 90)
+                    .padding(8)
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+
+                HStack {
+                    Button {
+                        editInstruction = defaultEditInstruction()
+                    } label: {
+                        Label(tr("예시 채우기", "AutoFill"), systemImage: "wand.and.stars")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Spacer()
+
+                    Button {
+                        Task { await saveEditByAI(editContext) }
+                    } label: {
+                        if isEditSaving {
+                            ProgressView()
+                        } else {
+                            Text(tr("AI로 수정 저장", "Save with AI"))
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isEditSaving || editInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if !editInfoMessage.isEmpty {
+                    Text(editInfoMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
     private var actionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(tr("요청/수락", "Request / Accept"))
@@ -809,6 +879,15 @@ private struct RecommendationDetailView: View {
                         }
                     }
                 }
+            } else if editContext != nil {
+                Text(
+                    tr(
+                        "내 글 상세 보기입니다. 내용 수정은 위의 AI 편집에서 진행하세요.",
+                        "This is your listing detail. Use AI Edit above to update content."
+                    )
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             } else {
                 if canSendRequest {
                     TextField(tr("요청 메모(선택)", "Request note (optional)"), text: $note)
@@ -900,12 +979,12 @@ private struct RecommendationDetailView: View {
     }
 
     private func loadDetail() async {
-        guard !currentUserEmail.isEmpty else { return }
+        guard !viewerEmail.isEmpty else { return }
         do {
             let detail = try await APIClient.shared.fetchRecommendationDetail(
                 categoryID: categoryID,
                 recommendationID: recommendation.id,
-                viewerEmail: currentUserEmail
+                viewerEmail: viewerEmail
             )
             localRecommendation = detail.recommendation
             if let action = detail.action {
@@ -1012,6 +1091,39 @@ private struct RecommendationDetailView: View {
         case "confirmed": return .blue
         case "canceled": return .gray
         default: return .secondary
+        }
+    }
+
+    private func defaultEditInstruction() -> String {
+        if isEnglish {
+            return "Update this post with clearer constraints and latest availability while keeping the same intent."
+        }
+        return "이 글을 같은 의도로 유지하면서, 조건/상세 설명/가능 시간(또는 가격)을 더 명확하게 보완해줘."
+    }
+
+    private func saveEditByAI(_ context: RecommendationDetailEditContext) async {
+        let text = editInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        isEditSaving = true
+        defer { isEditSaving = false }
+        do {
+            let message = isEnglish
+                ? "Current post summary: \(localRecommendation.subtitle)\nUpdate request: \(text)"
+                : "기존 글 요약: \(localRecommendation.subtitle)\n수정 요청: \(text)"
+            _ = try await APIClient.shared.askAgent(
+                categoryID: categoryID,
+                mode: "publish",
+                message: message,
+                userEmail: context.userEmail,
+                userName: context.userName.isEmpty ? nil : context.userName,
+                targetRecommendationID: localRecommendation.id
+            )
+            await loadDetail()
+            context.onSaved()
+            editInfoMessage = tr("AI가 글을 수정했습니다.", "AI updated your listing.")
+            editInstruction = ""
+        } catch {
+            editInfoMessage = tr("AI 편집에 실패했습니다. 잠시 후 다시 시도해 주세요.", "AI edit failed. Please try again.")
         }
     }
 }

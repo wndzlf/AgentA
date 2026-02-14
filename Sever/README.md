@@ -32,6 +32,13 @@ cd /Users/user/AgentA/Sever
 ./stop_api_daemon.sh
 ```
 
+QA 스모크(라우팅/ask 포함):
+
+```bash
+cd /Users/user/AgentA/Sever
+./qa_smoke.sh
+```
+
 ## 3) 수동 실행
 
 ```bash

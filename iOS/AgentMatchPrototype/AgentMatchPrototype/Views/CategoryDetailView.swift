@@ -43,6 +43,10 @@ struct CategoryDetailView: View {
         }
     }
 
+    private var displayedMessages: [String] {
+        Array(messages.suffix(5))
+    }
+
     var body: some View {
         ZStack {
             AppTheme.pageBackground
@@ -132,8 +136,10 @@ struct CategoryDetailView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(messages, id: \.self) { msg in
+                        ForEach(displayedMessages, id: \.self) { msg in
                             Text(msg)
+                                .lineLimit(msg.hasPrefix("AI:") ? 3 : 2)
+                                .truncationMode(.tail)
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(
@@ -144,6 +150,7 @@ struct CategoryDetailView: View {
                     }
                     .padding(.horizontal)
                 }
+                .frame(maxHeight: 190)
 
                 if isLoading {
                     HStack(spacing: 8) {
@@ -245,6 +252,7 @@ struct CategoryDetailView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .frame(maxHeight: .infinity)
 
                 VStack(alignment: .leading, spacing: 8) {
                     if !attachedImages.isEmpty {

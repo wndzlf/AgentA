@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -42,18 +43,48 @@ app = FastAPI(title="Agent Match Prototype API", version="0.1.0")
 ai_engine = AIEngine()
 
 
+def _parse_price_won(text: str) -> Optional[int]:
+    text = text or ""
+    match_manwon = re.search(r"(\d{1,4})\s*만원", text)
+    if match_manwon:
+        return int(match_manwon.group(1)) * 10000
+    match_won = re.search(r"(\d{2,9})\s*원", text)
+    if match_won:
+        return int(match_won.group(1))
+    return None
+
+
+def _format_price_range(prices: List[int]) -> Optional[str]:
+    if not prices:
+        return None
+    low = min(prices)
+    high = max(prices)
+    if low >= 10000 and high >= 10000:
+        low_m = low // 10000
+        high_m = high // 10000
+        return f"{low_m}만~{high_m}만원"
+    return f"{low:,}~{high:,}원"
+
+
 def _market_find_summary(user_message: str, recs: List) -> str:
     if not recs:
         return (
-            f"'{user_message}' 조건과 직접 일치하는 매물을 찾지 못했어요. "
-            "예산/지역/상태 조건을 추가하면 더 정확하게 찾아드릴게요."
+            f"'{user_message}' 관련 매물이 현재 0건이에요. "
+            "브랜드/모델/예산 조건을 조금 넓혀서 다시 검색해보세요."
         )
 
-    lines = [f"'{user_message}' 기준으로 관련 매물 {len(recs)}건을 찾았어요."]
-    for idx, rec in enumerate(recs[:3], start=1):
-        lines.append(f"{idx}) {rec.title} - {rec.subtitle}")
-    lines.append("원하면 위 후보 중 비교할 2개를 지정해 주세요.")
-    return "\n".join(lines)
+    prices: List[int] = []
+    for rec in recs:
+        parsed = _parse_price_won(f"{rec.title} {rec.subtitle}")
+        if parsed is not None:
+            prices.append(parsed)
+
+    price_range = _format_price_range(prices)
+    top_titles = [rec.title.replace("명품 매물: ", "") for rec in recs[:2]]
+    title_part = ", ".join(top_titles) if top_titles else "후보"
+    if price_range:
+        return f"'{user_message}' 관련 {len(recs)}건, 가격대 {price_range}. 상위: {title_part}."
+    return f"'{user_message}' 관련 {len(recs)}건을 찾았어요. 상위: {title_part}."
 
 
 @app.on_event("startup")

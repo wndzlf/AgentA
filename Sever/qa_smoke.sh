@@ -86,12 +86,18 @@ echo "[OK] ask(find): recs=$ASK_FIND_RECS"
 ASK_LUXURY_STRICT='{"category_id":"luxury","mode":"find","message":"코치가방 찾아줘"}'
 ASK_LUXURY_STRICT_RESP="$(curl -fsS -X POST "http://$HOST:$PORT/agent/ask" -H 'Content-Type: application/json' -d "$ASK_LUXURY_STRICT")"
 ASK_LUXURY_STRICT_RECS="$($PYTHON_BIN -c 'import json,sys; print(len(json.loads(sys.argv[1]).get("recommendations",[])))' "$ASK_LUXURY_STRICT_RESP")"
-if [[ "$ASK_LUXURY_STRICT_RECS" -ne 0 ]]; then
-  echo "[ERROR] ask(find,luxury) 무관 추천 노출: recs=$ASK_LUXURY_STRICT_RECS"
+if [[ "$ASK_LUXURY_STRICT_RECS" -lt 1 ]]; then
+  echo "[ERROR] ask(find,luxury) 코치 매물 추천 없음"
   exit 1
 fi
 
-echo "[OK] ask(find,luxury): strict no-match"
+ASK_LUXURY_RELEVANCE="$($PYTHON_BIN -c 'import json,sys,re; recs=json.loads(sys.argv[1]).get("recommendations",[]); ok=all(("coach" in ((r.get("title","")+r.get("subtitle","")).lower()) or ("코치" in (r.get("title","")+r.get("subtitle","")))) for r in recs); print("ok" if ok else "bad")' "$ASK_LUXURY_STRICT_RESP")"
+if [[ "$ASK_LUXURY_RELEVANCE" != "ok" ]]; then
+  echo "[ERROR] ask(find,luxury) 무관 추천 포함"
+  exit 1
+fi
+
+echo "[OK] ask(find,luxury): coach-only recommendations"
 
 ASK_PUBLISH='{"category_id":"dating","mode":"publish","message":"나는 차분하고 주말 오후 만남 선호, 소개팅 등록"}'
 ASK_PUBLISH_RESP="$(curl -fsS -X POST "http://$HOST:$PORT/agent/ask" -H 'Content-Type: application/json' -d "$ASK_PUBLISH")"

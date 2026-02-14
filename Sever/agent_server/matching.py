@@ -139,6 +139,8 @@ CURATED_SEED_BOARD_DATA: Dict[str, List[dict]] = {
         {"title": "명품 매물: Chanel 클래식 WOC", "subtitle": "인보이스/더스트백 포함, 365만원", "tags": ["샤넬", "정품", "인보이스"]},
         {"title": "명품 매물: Louis Vuitton 네오노에", "subtitle": "상태 A-, 178만원", "tags": ["루이비통", "상태A", "서울"]},
         {"title": "명품 매물: Cartier 탱크 머스트", "subtitle": "2024 구매, 보증서 포함", "tags": ["까르띠에", "보증서", "시계"]},
+        {"title": "명품 매물: Coach 태비 숄더 가방", "subtitle": "상태 A, 39만원", "tags": ["코치", "가방", "정품"]},
+        {"title": "명품 매물: Coach 로그 토트 가방", "subtitle": "사용감 있음, 22만원", "tags": ["코치", "토트", "가방"]},
     ],
     "soccer": [
         {"title": "팀 등록: FC 강남토요", "subtitle": "토 10시, 11:11, 중상", "tags": ["11:11", "강남", "토요일"]},

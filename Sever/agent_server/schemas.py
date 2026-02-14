@@ -20,6 +20,11 @@ class Recommendation(BaseModel):
     subtitle: str
     tags: List[str] = Field(default_factory=list)
     score: float
+    detail: str = ""
+    image_urls: List[str] = Field(default_factory=list)
+    owner_name: str = ""
+    owner_email_masked: str = ""
+    owner_phone_masked: str = ""
 
 
 class ModeOption(BaseModel):
@@ -73,6 +78,8 @@ class AskRequest(BaseModel):
     category_id: Optional[str] = None
     mode: Optional[str] = "find"
     message: str
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
 
 
 class AskResponse(BaseModel):
@@ -95,7 +102,15 @@ class MatchAction(BaseModel):
     recommendation_title: str
     recommendation_subtitle: str = ""
     status: str
+    actor_role: str = "viewer"
+    requester_email: str = ""
+    requester_name: str = ""
+    owner_email_masked: str = ""
     allowed_actions: List[str] = Field(default_factory=list)
+    contact_unlocked: bool = False
+    counterpart_name: Optional[str] = None
+    counterpart_email: Optional[str] = None
+    counterpart_phone: Optional[str] = None
     note: Optional[str] = None
     created_at: str
     updated_at: str
@@ -107,13 +122,32 @@ class ActionCreateRequest(BaseModel):
     recommendation_id: str
     recommendation_title: str
     recommendation_subtitle: str = ""
+    requester_email: str
+    requester_name: Optional[str] = None
     note: Optional[str] = None
 
 
 class ActionTransitionRequest(BaseModel):
     action: str
+    actor_email: str
     note: Optional[str] = None
 
 
 class ActionListResponse(BaseModel):
     actions: List[MatchAction] = Field(default_factory=list)
+
+
+class RecommendationDetailResponse(BaseModel):
+    recommendation: Recommendation
+    action: Optional[MatchAction] = None
+
+
+class EmailAuthRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+
+
+class EmailAuthResponse(BaseModel):
+    email: str
+    name: str
+    created: bool

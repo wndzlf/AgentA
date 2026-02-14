@@ -5,6 +5,16 @@ struct HomeView: View {
     @State private var query = ""
     @State private var showQuickAgent = false
     @State private var selectedDomain = "all"
+    @State private var showAuthGate = false
+    @AppStorage("current_user_email") private var currentUserEmail = ""
+    @AppStorage("current_user_name") private var currentUserName = ""
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
+
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
+
+    private func tr(_ ko: String, _ en: String) -> String {
+        isEnglish ? en : ko
+    }
 
     private var filteredCategories: [Category] {
         viewModel.categories.filter { category in
@@ -20,7 +30,7 @@ struct HomeView: View {
     private var domainOptions: [(id: String, title: String)] {
         let domains = Set(viewModel.categories.map { $0.domain ?? "unknown" })
         let ordered = domains.sorted()
-        return [("all", "전체")] + ordered.map { ($0, domainTitle($0)) }
+        return [("all", tr("전체", "All"))] + ordered.map { ($0, domainTitle($0)) }
     }
 
     private var groupedCategories: [(domain: String, items: [Category])] {
@@ -120,20 +130,73 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Agent Match")
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "카테고리 검색")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: tr("카테고리 검색", "Search categories"))
             .navigationDestination(for: Category.self) { category in
                 CategoryDetailView(category: category)
             }
             .sheet(isPresented: $showQuickAgent) {
                 QuickAgentView()
             }
+            .fullScreenCover(isPresented: $showAuthGate) {
+                EmailAuthView(
+                    currentEmail: $currentUserEmail,
+                    currentName: $currentUserName
+                )
+                .interactiveDismissDisabled(true)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Section(tr("언어", "Language")) {
+                            Button("한국어") {
+                                appLanguageCode = "ko"
+                                Task { await viewModel.load() }
+                            }
+                            Button("English") {
+                                appLanguageCode = "en"
+                                Task { await viewModel.load() }
+                            }
+                        }
+                        Section(tr("계정", "Account")) {
+                            if !currentUserEmail.isEmpty {
+                                Text(currentUserEmail)
+                                Button(tr("로그아웃", "Sign out"), role: .destructive) {
+                                    currentUserEmail = ""
+                                    currentUserName = ""
+                                    showAuthGate = true
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "globe")
+                    }
+                }
+            }
             .task {
                 await viewModel.load()
+                showAuthGate = currentUserEmail.isEmpty
+            }
+            .onChange(of: currentUserEmail) { newValue in
+                showAuthGate = newValue.isEmpty
+            }
+            .onChange(of: appLanguageCode) { _ in
+                Task { await viewModel.load() }
             }
         }
     }
 
     private func domainTitle(_ domain: String) -> String {
+        if isEnglish {
+            switch domain {
+            case "people": return "People"
+            case "sport": return "Sports"
+            case "market": return "Commerce"
+            case "service": return "Services"
+            case "learning": return "Learning"
+            case "job": return "Career"
+            default: return "Others"
+            }
+        }
         switch domain {
         case "people": return "사람/관계"
         case "sport": return "스포츠"
@@ -154,6 +217,83 @@ struct HomeView: View {
         case "learning": return 4
         case "job": return 5
         default: return 99
+        }
+    }
+}
+
+private struct EmailAuthView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var currentEmail: String
+    @Binding var currentName: String
+
+    @State private var email = ""
+    @State private var name = ""
+    @State private var isLoading = false
+    @State private var errorMessage = ""
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
+
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
+    private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(tr("이메일로 시작하기", "Start with Email"))
+                    .font(.largeTitle.weight(.bold))
+                Text(tr("매칭 요청/수락 후 연락처 공개를 위해 로그인해 주세요.", "Sign in to unlock request, accept, and contact-sharing flows."))
+                    .foregroundStyle(.secondary)
+
+                TextField("name@example.com", text: $email)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+
+                TextField(tr("이름(선택)", "Name (optional)"), text: $name)
+                    .textFieldStyle(.roundedBorder)
+
+                Button {
+                    Task { await signIn() }
+                } label: {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text(tr("계속하기", "Continue"))
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                Spacer()
+            }
+            .padding(24)
+            .background(AppTheme.pageBackground.ignoresSafeArea())
+        }
+    }
+
+    private func signIn() async {
+        let cleanedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedEmail.isEmpty else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let res = try await APIClient.shared.signInEmail(
+                email: cleanedEmail,
+                name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : name
+            )
+            currentEmail = res.email
+            currentName = res.name
+            dismiss()
+        } catch {
+            errorMessage = tr("로그인 실패. 로컬 서버 상태를 확인해 주세요.", "Sign-in failed. Check local server status.")
         }
     }
 }

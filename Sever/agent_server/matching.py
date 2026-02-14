@@ -95,6 +95,14 @@ CURATED_PROFILE_TITLES = {
     "futsal": "풋살팀 등록",
 }
 
+MOCK_OWNER_POOL = [
+    {"name": "민지", "email": "minji.seller@agenta.local", "phone": "010-2101-4132"},
+    {"name": "준호", "email": "junho.trade@agenta.local", "phone": "010-5228-1944"},
+    {"name": "서윤", "email": "seoyun.market@agenta.local", "phone": "010-7351-0082"},
+    {"name": "도윤", "email": "doyoon.match@agenta.local", "phone": "010-6642-3009"},
+    {"name": "지아", "email": "jia.connect@agenta.local", "phone": "010-4872-7714"},
+]
+
 # 카테고리별 실제 서버 보드(로컬 메모리)
 BOARD: DefaultDict[str, List[dict]] = defaultdict(list)
 
@@ -231,6 +239,34 @@ def _extract_tags(message: str) -> List[str]:
     return out
 
 
+def _mask_email(email: str) -> str:
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        masked_local = local[0] + "*"
+    else:
+        masked_local = local[:2] + ("*" * max(1, len(local) - 2))
+    return f"{masked_local}@{domain}"
+
+
+def _mask_phone(phone: str) -> str:
+    digits = re.sub(r"[^0-9]", "", phone)
+    if len(digits) < 8:
+        return phone
+    return f"{digits[:3]}-****-{digits[-4:]}"
+
+
+def _owner_profile_for(category_id: str, stable_index: int = 0) -> dict:
+    idx = (sum(ord(ch) for ch in category_id) + stable_index) % len(MOCK_OWNER_POOL)
+    return MOCK_OWNER_POOL[idx]
+
+
+def _image_seed_urls(seed: str, count: int = 3) -> List[str]:
+    safe_seed = re.sub(r"[^0-9A-Za-z_-]", "", seed) or "item"
+    return [f"https://picsum.photos/seed/{safe_seed}-{idx}/800/600" for idx in range(1, count + 1)]
+
+
 def _score_item(query_tokens: List[str], item: dict, from_board: bool = False) -> Tuple[float, int]:
     title = item.get("title", "").lower()
     subtitle = item.get("subtitle", "").lower()
@@ -269,16 +305,63 @@ def _score_item(query_tokens: List[str], item: dict, from_board: bool = False) -
     return score, hits
 
 
-def _insert_board_item(category_id: str, title: str, subtitle: str, tags: List[str], item_id: Optional[str] = None) -> dict:
+def _insert_board_item(
+    category_id: str,
+    title: str,
+    subtitle: str,
+    tags: List[str],
+    item_id: Optional[str] = None,
+    detail: Optional[str] = None,
+    image_urls: Optional[List[str]] = None,
+    owner_name: Optional[str] = None,
+    owner_email: Optional[str] = None,
+    owner_phone: Optional[str] = None,
+) -> dict:
+    stable_index = len(BOARD.get(category_id, []))
+    owner = _owner_profile_for(category_id, stable_index)
+    resolved_owner_name = owner_name or owner["name"]
+    resolved_owner_email = owner_email or owner["email"]
+    resolved_owner_phone = owner_phone or owner["phone"]
+    item_key = item_id or f"{category_id}-user-{uuid4().hex[:8]}"
+    resolved_detail = detail or f"{title} · {subtitle}. 태그: {', '.join(tags[:4])}"
+    resolved_images = image_urls if image_urls is not None else _image_seed_urls(item_key, count=3)
     item = {
-        "id": item_id or f"{category_id}-user-{uuid4().hex[:8]}",
+        "id": item_key,
         "title": title,
         "subtitle": subtitle,
         "tags": tags[:4] if tags else ["매칭", "조건"],
+        "detail": resolved_detail,
+        "image_urls": resolved_images[:5],
+        "owner_name": resolved_owner_name,
+        "owner_email": resolved_owner_email,
+        "owner_phone": resolved_owner_phone,
+        "created_at": _now_iso(),
     }
     BOARD[category_id].insert(0, item)
     BOARD[category_id] = BOARD[category_id][:120]
     return item
+
+
+def _recommendation_from_item(item: dict, score: float) -> Recommendation:
+    return Recommendation(
+        id=item["id"],
+        title=item["title"],
+        subtitle=item["subtitle"],
+        tags=item.get("tags", []),
+        score=score,
+        detail=item.get("detail", ""),
+        image_urls=item.get("image_urls", []),
+        owner_name=item.get("owner_name", ""),
+        owner_email_masked=_mask_email(item.get("owner_email", "")),
+        owner_phone_masked=_mask_phone(item.get("owner_phone", "")),
+    )
+
+
+def _find_board_item(category_id: str, recommendation_id: str) -> Optional[dict]:
+    for item in BOARD.get(category_id, []):
+        if item.get("id") == recommendation_id:
+            return item
+    return None
 
 
 def _default_candidates_for_category(category_id: str) -> List[dict]:
@@ -472,19 +555,69 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _allowed_actions_for(status: str) -> List[str]:
-    return list(ACTION_TRANSITIONS.get(status, {}).keys())
+def _viewer_role(action: dict, viewer_email: Optional[str]) -> str:
+    email = (viewer_email or "").strip().lower()
+    if not email:
+        return "viewer"
+    if email == (action.get("owner_email") or "").lower():
+        return "owner"
+    if email == (action.get("requester_email") or "").lower():
+        return "requester"
+    return "viewer"
 
 
-def _serialize_action(action: dict) -> dict:
+def _can_run_command(status: str, command: str, role: str) -> bool:
+    if role not in {"owner", "requester"}:
+        return False
+    if command not in ACTION_TRANSITIONS.get(status, {}):
+        return False
+    if command in {"accept", "reject"}:
+        return role == "owner"
+    if command == "confirm":
+        return role == "requester"
+    if command == "cancel":
+        return role in {"owner", "requester"}
+    return False
+
+
+def _allowed_actions_for(status: str, role: str) -> List[str]:
+    possible = list(ACTION_TRANSITIONS.get(status, {}).keys())
+    return [command for command in possible if _can_run_command(status, command, role)]
+
+
+def _serialize_action(action: dict, viewer_email: Optional[str] = None) -> dict:
+    role = _viewer_role(action, viewer_email)
+    status = action["status"]
+    contact_unlocked = status in {"accepted", "confirmed"} and role in {"owner", "requester"}
+    counterpart_name: Optional[str] = None
+    counterpart_email: Optional[str] = None
+    counterpart_phone: Optional[str] = None
+
+    if contact_unlocked:
+        if role == "requester":
+            counterpart_name = action.get("owner_name") or "상대"
+            counterpart_email = action.get("owner_email")
+            counterpart_phone = action.get("owner_phone")
+        elif role == "owner":
+            counterpart_name = action.get("requester_name") or "요청자"
+            counterpart_email = action.get("requester_email")
+
     return {
         "id": action["id"],
         "category_id": action["category_id"],
         "recommendation_id": action["recommendation_id"],
         "recommendation_title": action["recommendation_title"],
         "recommendation_subtitle": action.get("recommendation_subtitle", ""),
-        "status": action["status"],
-        "allowed_actions": _allowed_actions_for(action["status"]),
+        "status": status,
+        "actor_role": role,
+        "requester_email": action.get("requester_email", ""),
+        "requester_name": action.get("requester_name", ""),
+        "owner_email_masked": _mask_email(action.get("owner_email", "")),
+        "allowed_actions": _allowed_actions_for(status, role),
+        "contact_unlocked": contact_unlocked,
+        "counterpart_name": counterpart_name,
+        "counterpart_email": counterpart_email,
+        "counterpart_phone": counterpart_phone,
         "note": action.get("note"),
         "created_at": action["created_at"],
         "updated_at": action["updated_at"],
@@ -492,7 +625,7 @@ def _serialize_action(action: dict) -> dict:
     }
 
 
-def list_actions(category_id: Optional[str] = None) -> List[dict]:
+def list_actions(category_id: Optional[str] = None, viewer_email: Optional[str] = None) -> List[dict]:
     if category_id:
         ids = ACTION_INDEX_BY_CATEGORY.get(category_id, [])
     else:
@@ -500,16 +633,23 @@ def list_actions(category_id: Optional[str] = None) -> List[dict]:
 
     actions = [ACTIONS[action_id] for action_id in ids if action_id in ACTIONS]
     actions.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
-    return [_serialize_action(item) for item in actions]
+    return [_serialize_action(item, viewer_email=viewer_email) for item in actions]
 
 
-def find_action_by_recommendation(category_id: str, recommendation_id: str) -> Optional[dict]:
+def find_action_by_recommendation(
+    category_id: str,
+    recommendation_id: str,
+    requester_email: Optional[str] = None,
+) -> Optional[dict]:
     candidate_ids = ACTION_INDEX_BY_RECOMMENDATION.get(recommendation_id, [])
+    req_email = (requester_email or "").strip().lower()
     for action_id in candidate_ids:
         action = ACTIONS.get(action_id)
         if not action:
             continue
         if action["category_id"] != category_id:
+            continue
+        if req_email and (action.get("requester_email") or "").lower() != req_email:
             continue
         if action["status"] in {"requested", "accepted"}:
             return action
@@ -521,12 +661,27 @@ def request_action(
     recommendation_id: str,
     recommendation_title: str,
     recommendation_subtitle: str = "",
+    requester_email: str = "",
+    requester_name: Optional[str] = None,
     note: Optional[str] = None,
 ) -> dict:
     cid = category_id or "friend"
-    existing = find_action_by_recommendation(cid, recommendation_id)
+    req_email = requester_email.strip().lower()
+    if not req_email:
+        raise ValueError("requester_email is required")
+
+    existing = find_action_by_recommendation(cid, recommendation_id, requester_email=req_email)
     if existing:
-        return _serialize_action(existing)
+        return _serialize_action(existing, viewer_email=req_email)
+
+    board_item = _find_board_item(cid, recommendation_id)
+    owner_profile = _owner_profile_for(cid, stable_index=0)
+    owner_email = (board_item or {}).get("owner_email", owner_profile["email"]).lower()
+    owner_name = (board_item or {}).get("owner_name", owner_profile["name"])
+    owner_phone = (board_item or {}).get("owner_phone", owner_profile["phone"])
+
+    if owner_email == req_email:
+        raise ValueError("cannot request your own listing")
 
     now = _now_iso()
     action_id = f"act-{uuid4().hex[:10]}"
@@ -537,6 +692,11 @@ def request_action(
         "recommendation_title": recommendation_title,
         "recommendation_subtitle": recommendation_subtitle,
         "status": "requested",
+        "requester_email": req_email,
+        "requester_name": (requester_name or req_email.split("@")[0]).strip() or "요청자",
+        "owner_email": owner_email,
+        "owner_name": owner_name,
+        "owner_phone": owner_phone,
         "note": note,
         "created_at": now,
         "updated_at": now,
@@ -551,10 +711,10 @@ def request_action(
     ACTIONS[action_id] = action
     ACTION_INDEX_BY_CATEGORY[cid].append(action_id)
     ACTION_INDEX_BY_RECOMMENDATION[recommendation_id].append(action_id)
-    return _serialize_action(action)
+    return _serialize_action(action, viewer_email=req_email)
 
 
-def transition_action(action_id: str, command: str, note: Optional[str] = None) -> dict:
+def transition_action(action_id: str, command: str, actor_email: str, note: Optional[str] = None) -> dict:
     action = ACTIONS.get(action_id)
     if not action:
         raise KeyError(action_id)
@@ -564,6 +724,10 @@ def transition_action(action_id: str, command: str, note: Optional[str] = None) 
     if command not in possible:
         allowed = ", ".join(possible.keys()) if possible else "없음"
         raise ValueError(f"invalid transition: {current} -> {command} (allowed: {allowed})")
+
+    role = _viewer_role(action, actor_email)
+    if not _can_run_command(current, command, role):
+        raise PermissionError(f"forbidden transition: role={role}, status={current}, command={command}")
 
     next_status = possible[command]
     now = _now_iso()
@@ -575,13 +739,18 @@ def transition_action(action_id: str, command: str, note: Optional[str] = None) 
         {
             "status": next_status,
             "note": note,
-            "at": now,
-        }
+                "at": now,
+            }
     )
-    return _serialize_action(action)
+    return _serialize_action(action, viewer_email=actor_email)
 
 
-def publish_listing(category_id: Optional[str], message: str) -> Recommendation:
+def publish_listing(
+    category_id: Optional[str],
+    message: str,
+    owner_name: Optional[str] = None,
+    owner_email: Optional[str] = None,
+) -> Tuple[Recommendation, bool]:
     cid = category_id or "friend"
     tags = _extract_tags(message)
     title = _profile_title(cid)
@@ -590,19 +759,35 @@ def publish_listing(category_id: Optional[str], message: str) -> Recommendation:
         summary = "조건 미입력"
     if len(summary) > 42:
         summary = summary[:42] + "..."
+    normalized_owner_email = (owner_email or "").strip().lower()
+
+    # AI 업서트: 같은 카테고리에서 내가 올린 최신 글을 음성/텍스트로 다시 말하면 수정으로 처리.
+    if normalized_owner_email:
+        for idx, existing in enumerate(BOARD.get(cid, [])):
+            if (existing.get("owner_email") or "").lower() != normalized_owner_email:
+                continue
+            existing["title"] = f"{title} 수정됨"
+            existing["subtitle"] = summary
+            existing["tags"] = tags[:4] if tags else ["매칭", "조건"]
+            existing["detail"] = f"{summary}\n등록자: {owner_name or existing.get('owner_name', '익명')}\n태그: {', '.join(tags)}"
+            if owner_name:
+                existing["owner_name"] = owner_name
+            existing["updated_at"] = _now_iso()
+            # 수정된 항목을 보드 최상단으로 이동
+            BOARD[cid].pop(idx)
+            BOARD[cid].insert(0, existing)
+            return _recommendation_from_item(existing, score=0.99), True
+
     item = _insert_board_item(
         category_id=cid,
         title=f"{title} 등록됨",
         subtitle=summary,
         tags=tags,
+        detail=f"{summary}\n등록자: {owner_name or '익명'}\n태그: {', '.join(tags)}",
+        owner_name=owner_name,
+        owner_email=normalized_owner_email or None,
     )
-    return Recommendation(
-        id=item["id"],
-        title=item["title"],
-        subtitle=item["subtitle"],
-        tags=item["tags"],
-        score=0.99,
-    )
+    return _recommendation_from_item(item, score=0.99), False
 
 
 def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "find") -> List[Recommendation]:
@@ -614,18 +799,7 @@ def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "f
 
     for item in board_items:
         score, hits = _score_item(query_tokens, item, from_board=True)
-        scored.append(
-            (
-                Recommendation(
-                    id=item["id"],
-                    title=item["title"],
-                    subtitle=item["subtitle"],
-                    tags=item["tags"],
-                    score=score,
-                ),
-                hits,
-            )
-        )
+        scored.append((_recommendation_from_item(item, score=score), hits))
 
     if not board_items:
         for idx, item in enumerate(default_items, start=1):
@@ -643,6 +817,11 @@ def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "f
                         subtitle=item["subtitle"],
                         tags=item["tags"],
                         score=score,
+                        detail=f"{item['title']} · {item['subtitle']}",
+                        image_urls=_image_seed_urls(f"{cid}-default-{idx}", count=3),
+                        owner_name=_owner_profile_for(cid, idx)["name"],
+                        owner_email_masked=_mask_email(_owner_profile_for(cid, idx)["email"]),
+                        owner_phone_masked=_mask_phone(_owner_profile_for(cid, idx)["phone"]),
                     ),
                     hits,
                 )
@@ -664,3 +843,71 @@ def recommend(category_id: Optional[str], message: str, mode: Optional[str] = "f
     if mode == "publish":
         return out[:5]
     return out[:8]
+
+
+def find_action_for_viewer(
+    category_id: str,
+    recommendation_id: str,
+    viewer_email: Optional[str],
+) -> Optional[dict]:
+    candidate_ids = ACTION_INDEX_BY_RECOMMENDATION.get(recommendation_id, [])
+    if not candidate_ids:
+        return None
+
+    email = (viewer_email or "").strip().lower()
+    candidates: List[dict] = []
+    for action_id in candidate_ids:
+        action = ACTIONS.get(action_id)
+        if not action:
+            continue
+        if action.get("category_id") != category_id:
+            continue
+        candidates.append(action)
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    if not email:
+        return candidates[0]
+
+    for action in candidates:
+        if email in {
+            (action.get("owner_email") or "").lower(),
+            (action.get("requester_email") or "").lower(),
+        }:
+            return action
+    return candidates[0]
+
+
+def recommendation_detail(category_id: str, recommendation_id: str, viewer_email: Optional[str] = None) -> dict:
+    item = _find_board_item(category_id, recommendation_id)
+    if not item:
+        # 기본 추천에서 생성된 id(default-*)를 상세 조회할 때의 fallback
+        defaults = _default_candidates_for_category(category_id)
+        matched = None
+        for idx, row in enumerate(defaults, start=1):
+            if recommendation_id == f"{category_id}-default-{idx}":
+                matched = row
+                break
+        if not matched:
+            raise KeyError(recommendation_id)
+        owner = _owner_profile_for(category_id, 1)
+        item = {
+            "id": recommendation_id,
+            "title": matched["title"],
+            "subtitle": matched["subtitle"],
+            "tags": matched["tags"],
+            "detail": f"{matched['title']} · {matched['subtitle']}",
+            "image_urls": _image_seed_urls(recommendation_id, count=3),
+            "owner_name": owner["name"],
+            "owner_email": owner["email"],
+            "owner_phone": owner["phone"],
+        }
+
+    recommendation = _recommendation_from_item(item, score=0.99).dict()
+    action = find_action_for_viewer(category_id, recommendation_id, viewer_email)
+    return {
+        "recommendation": recommendation,
+        "action": _serialize_action(action, viewer_email=viewer_email) if action else None,
+    }

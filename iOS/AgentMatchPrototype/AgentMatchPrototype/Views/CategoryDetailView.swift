@@ -24,13 +24,21 @@ struct CategoryDetailView: View {
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
     @State private var attachedImages: [UIImage] = []
     @StateObject private var speechController = SpeechInputController()
+    @AppStorage("current_user_email") private var currentUserEmail = ""
+    @AppStorage("current_user_name") private var currentUserName = ""
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
+
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
 
     private var inputPlaceholder: String {
-        activeModeID == "publish" ? "등록할 내용을 입력하세요" : "조건을 말해보세요"
+        if activeModeID == "publish" {
+            return isEnglish ? "Speak and AI will post/update for you" : "말하면 AI가 올리거나 수정해요"
+        }
+        return isEnglish ? "Tell your conditions" : "조건을 말해보세요"
     }
 
     private var sendLabel: String {
-        activeModeID == "publish" ? "등록" : "전송"
+        activeModeID == "publish" ? (isEnglish ? "Post" : "등록") : (isEnglish ? "Send" : "전송")
     }
 
     private var displayedRecommendations: [Recommendation] {
@@ -52,7 +60,7 @@ struct CategoryDetailView: View {
             AppTheme.pageBackground
                 .ignoresSafeArea()
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 if !modes.isEmpty {
                     Picker("모드", selection: $activeModeID) {
                         ForEach(modes) { mode in
@@ -123,13 +131,14 @@ struct CategoryDetailView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(displayedMessages, id: \.self) { msg in
                         Text(msg)
                             .font(.footnote)
-                            .lineLimit(4)
+                            .lineLimit(3)
                             .truncationMode(.tail)
-                            .padding(9)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
@@ -138,7 +147,7 @@ struct CategoryDetailView: View {
                     }
                 }
                 .padding(.horizontal)
-                .frame(maxHeight: 96)
+                .frame(maxHeight: 74, alignment: .top)
 
                 if isLoading {
                     HStack(spacing: 8) {
@@ -329,13 +338,26 @@ struct CategoryDetailView: View {
         .onDisappear {
             speechController.stopListening()
         }
-        .sheet(item: $selectedRecommendation) { recommendation in
-            RecommendationActionSheet(
-                categoryID: category.id,
-                recommendation: recommendation,
-                currentAction: actionByRecommendationID[recommendation.id]
-            ) { updated in
-                actionByRecommendationID[updated.recommendationID] = updated
+        .navigationDestination(
+            isPresented: Binding(
+                get: { selectedRecommendation != nil },
+                set: { isPresented in
+                    if !isPresented { selectedRecommendation = nil }
+                }
+            )
+        ) {
+            if let recommendation = selectedRecommendation {
+                RecommendationDetailView(
+                    categoryID: category.id,
+                    categoryDomain: category.domain ?? "",
+                    categoryName: category.name,
+                    recommendation: recommendation,
+                    currentAction: actionByRecommendationID[recommendation.id]
+                ) { updated in
+                    actionByRecommendationID[updated.recommendationID] = updated
+                }
+            } else {
+                EmptyView()
             }
         }
     }
@@ -346,7 +368,10 @@ struct CategoryDetailView: View {
             async let schema = APIClient.shared.fetchCategorySchema(categoryID: category.id, mode: mode)
             let response = try await boot
             let schemaResponse = try await schema
-            let actions = (try? await APIClient.shared.fetchActions(categoryID: category.id)) ?? []
+            let actions = (try? await APIClient.shared.fetchActions(
+                categoryID: category.id,
+                viewerEmail: currentUserEmail
+            )) ?? []
             isApplyingBootstrap = true
             modes = response.modes
             if activeModeID != response.activeMode {
@@ -410,7 +435,13 @@ struct CategoryDetailView: View {
             if mode == "publish" && !attachedImages.isEmpty {
                 requestMessage += "\n첨부 이미지: \(attachedImages.count)장"
             }
-            let response = try await APIClient.shared.askAgent(categoryID: category.id, mode: mode, message: requestMessage)
+            let response = try await APIClient.shared.askAgent(
+                categoryID: category.id,
+                mode: mode,
+                message: requestMessage,
+                userEmail: currentUserEmail,
+                userName: currentUserName.isEmpty ? nil : currentUserName
+            )
             messages = ["AI: \(response.assistantMessage)"]
             if mode == "publish" {
                 selectedPhotoItems = []
@@ -460,19 +491,42 @@ struct CategoryDetailView: View {
     }
 
     private func refreshActions() async {
-        let actions = (try? await APIClient.shared.fetchActions(categoryID: category.id)) ?? []
+        let actions = (try? await APIClient.shared.fetchActions(
+            categoryID: category.id,
+            viewerEmail: currentUserEmail
+        )) ?? []
         actionByRecommendationID = reduceActions(actions)
     }
 
     private func localPromptHint(for mode: String) -> String {
         if mode == "publish" {
-            return "서버 연결 없이 데모 모드 · 등록에 필요한 정보를 입력하세요."
+            return isEnglish
+                ? "Demo mode (offline) · Speak key info and AI will post or update."
+                : "서버 연결 없이 데모 모드 · 말하면 AI가 등록/수정해요."
         }
-        return "서버 연결 없이 데모 모드 · 조건을 입력하면 추천 흐름을 미리 볼 수 있어요."
+        return isEnglish
+            ? "Demo mode (offline) · Enter conditions to preview recommendation flow."
+            : "서버 연결 없이 데모 모드 · 조건을 입력하면 추천 흐름을 미리 볼 수 있어요."
     }
 
     private func localWelcomeMessage(for mode: String) -> String {
         if mode == "publish" {
+            if isEnglish {
+                switch category.id {
+                case "luxury":
+                    return "AI: Want to post or update a luxury listing? Tell brand, model, condition, and price."
+                case "trade":
+                    return "AI: Want to post or update an item? Tell product, condition, price, and location."
+                case "dating":
+                    return "AI: Want to post or update your dating profile? Tell personality and preferred match."
+                case "friend":
+                    return "AI: Want to post or update your friend profile? Tell interests and active hours."
+                case "soccer", "futsal":
+                    return "AI: Want to post or update your team profile? Tell level, location, and time."
+                default:
+                    return "AI: Want to post or update? Tell core details (title/conditions/price or schedule)."
+                }
+            }
             switch category.id {
             case "luxury":
                 return "AI: 올리고 싶은 명품 가방이 있나요? 브랜드, 모델, 상태, 가격, 인증 정보를 알려주세요."
@@ -488,7 +542,9 @@ struct CategoryDetailView: View {
                 return "AI: 올리고 싶은 항목이 있나요? 핵심 정보(제목/조건/가격 또는 일정)를 알려주세요."
             }
         }
-        return "AI: 원하는 조건을 말해주면 추천을 보여줄게요."
+        return isEnglish
+            ? "AI: Tell your conditions and I will show recommendations."
+            : "AI: 원하는 조건을 말해주면 추천을 보여줄게요."
     }
 
     private func statusLabel(for status: String) -> String {
@@ -540,14 +596,20 @@ struct CategoryDetailView: View {
     }
 }
 
-private struct RecommendationActionSheet: View {
-    @Environment(\.dismiss) private var dismiss
+private struct RecommendationDetailView: View {
+    @Environment(\.openURL) private var openURL
+    @AppStorage("current_user_email") private var currentUserEmail = ""
+    @AppStorage("current_user_name") private var currentUserName = ""
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
 
     let categoryID: String
+    let categoryDomain: String
+    let categoryName: String
     let recommendation: Recommendation
     let currentAction: MatchAction?
     let onUpdated: (MatchAction) -> Void
 
+    @State private var localRecommendation: Recommendation
     @State private var localAction: MatchAction?
     @State private var note = ""
     @State private var isLoading = false
@@ -555,155 +617,354 @@ private struct RecommendationActionSheet: View {
 
     init(
         categoryID: String,
+        categoryDomain: String,
+        categoryName: String,
         recommendation: Recommendation,
         currentAction: MatchAction?,
         onUpdated: @escaping (MatchAction) -> Void
     ) {
         self.categoryID = categoryID
+        self.categoryDomain = categoryDomain
+        self.categoryName = categoryName
         self.recommendation = recommendation
         self.currentAction = currentAction
         self.onUpdated = onUpdated
+        _localRecommendation = State(initialValue: recommendation)
         _localAction = State(initialValue: currentAction)
     }
 
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
+    private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
+    private var canSendRequest: Bool { !currentUserEmail.isEmpty }
+
     var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(recommendation.title)
-                        .font(.title3.weight(.semibold))
-                    Text(recommendation.subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    if let action = localAction {
-                        HStack(spacing: 6) {
-                            Image(systemName: statusIcon(action.status))
-                            Text("현재 상태: \(statusLabel(action.status))")
-                                .font(.footnote.weight(.semibold))
-                        }
-                        .foregroundStyle(statusColor(action.status))
-                    } else {
-                        Text("아직 요청이 생성되지 않았습니다.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-
-                TextField("메모(선택)", text: $note)
-                    .textFieldStyle(.roundedBorder)
-
-                if let action = localAction {
-                    if action.allowedActions.isEmpty {
-                        Text("이 상태에서는 추가로 가능한 액션이 없습니다.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        HStack {
-                            ForEach(action.allowedActions, id: \.self) { command in
-                                Button(labelFor(command)) {
-                                    Task { await transition(command) }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(colorFor(command))
-                                .disabled(isLoading)
-                            }
-                        }
-                    }
-                } else {
-                    Button("요청 보내기") {
-                        Task { await request() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isLoading)
-                }
-
-                if !infoMessage.isEmpty {
-                    Text(infoMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let action = localAction, !action.history.isEmpty {
-                    Text("진행 이력")
-                        .font(.headline)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(action.history.indices, id: \.self) { index in
-                                let item = action.history[index]
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(statusLabel(item.status)) · \(item.at)")
-                                        .font(.caption.weight(.semibold))
-                                    if let note = item.note, !note.isEmpty {
-                                        Text(note)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-                            }
-                        }
-                    }
-                }
-
-                Spacer(minLength: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                imageSection
+                infoSection
+                variationSection
+                actionSection
+                contactSection
+                historySection
             }
-            .padding()
-            .navigationTitle("상세 액션")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("닫기") { dismiss() }
+            .padding(16)
+        }
+        .background(AppTheme.pageBackground.ignoresSafeArea())
+        .navigationTitle(tr("상세 정보", "Detail"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadDetail()
+        }
+    }
+
+    private var imageSection: some View {
+        let images = localRecommendation.imageURLs ?? []
+        return Group {
+            if images.isEmpty {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(height: 180)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo")
+                                .font(.title2)
+                            Text(tr("등록된 이미지 없음", "No image uploaded"))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    )
+            } else {
+                TabView {
+                    ForEach(images, id: \.self) { urlString in
+                        AsyncImage(url: URL(string: urlString)) { phase in
+                            switch phase {
+                            case let .success(image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure:
+                                Color.secondary.opacity(0.12)
+                            case .empty:
+                                ProgressView()
+                            @unknown default:
+                                Color.secondary.opacity(0.12)
+                            }
+                        }
+                    }
                 }
+                .frame(height: 220)
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
     }
 
+    private var infoSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(localRecommendation.title)
+                .font(.title3.weight(.bold))
+            Text(localRecommendation.subtitle)
+                .foregroundStyle(.secondary)
+            if let detail = localRecommendation.detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(5)
+            }
+            HStack {
+                ForEach(localRecommendation.tags, id: \.self) { tag in
+                    Text("#\(tag)")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(AppTheme.tagPill)
+                        .clipShape(Capsule())
+                }
+            }
+            HStack(spacing: 6) {
+                Text(tr("판매/작성자", "Owner"))
+                    .font(.caption.weight(.semibold))
+                Text(localRecommendation.ownerName ?? "-")
+                    .font(.caption)
+                Text("·")
+                    .foregroundStyle(.secondary)
+                Text(localRecommendation.ownerEmailMasked ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    @ViewBuilder
+    private var variationSection: some View {
+        if categoryDomain == "market" {
+            variationCard(
+                title: tr("거래 포인트", "Trade Points"),
+                lines: [
+                    tr("가격/상태/구성품을 확인하고 요청을 보내세요.", "Check price, condition, and included items before requesting."),
+                    tr("요청 수락 후에만 연락처가 공개됩니다.", "Contact is revealed only after acceptance."),
+                ]
+            )
+        } else if categoryDomain == "sport" {
+            variationCard(
+                title: tr("매치 포인트", "Match Points"),
+                lines: [
+                    tr("시간대/지역/레벨 조건이 맞는지 확인하세요.", "Verify schedule, location, and level fit."),
+                    tr("요청 수락 후 팀 연락 채널이 열립니다.", "Team contact opens after acceptance."),
+                ]
+            )
+        } else {
+            variationCard(
+                title: tr("매칭 포인트", "Matching Points"),
+                lines: [
+                    tr("\(categoryName) 카테고리 조건 일치도를 먼저 확인하세요.", "Review how well this candidate fits your \(categoryName) preferences."),
+                    tr("상대 수락 이후에만 직접 연락이 가능합니다.", "Direct contact unlocks only after the counterpart accepts."),
+                ]
+            )
+        }
+    }
+
+    private func variationCard(title: String, lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.headline)
+            ForEach(lines, id: \.self) { line in
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                        .padding(.top, 2)
+                    Text(line)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var actionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(tr("요청/수락", "Request / Accept"))
+                .font(.headline)
+
+            if let action = localAction {
+                HStack(spacing: 8) {
+                    Image(systemName: statusIcon(action.status))
+                    Text("\(tr("현재 상태", "Current status")): \(statusLabel(action.status))")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(statusColor(action.status))
+
+                if !action.allowedActions.isEmpty {
+                    HStack {
+                        ForEach(action.allowedActions, id: \.self) { command in
+                            Button(labelFor(command)) {
+                                Task { await transition(command) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(colorFor(command))
+                            .disabled(isLoading || currentUserEmail.isEmpty)
+                        }
+                    }
+                }
+            } else {
+                if canSendRequest {
+                    TextField(tr("요청 메모(선택)", "Request note (optional)"), text: $note)
+                        .textFieldStyle(.roundedBorder)
+                    Button(tr("이 항목 요청하기", "Request this item")) {
+                        Task { await request() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading)
+                } else {
+                    Text(tr("요청 전 이메일 로그인 필요", "Email sign-in required before requesting"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !infoMessage.isEmpty {
+                Text(infoMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var contactSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tr("연락", "Contact")).font(.headline)
+            if let action = localAction, action.contactUnlocked == true {
+                Text(tr("상대가 수락해서 연락처가 공개되었습니다.", "Your match accepted. Contact is now unlocked."))
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+                if let name = action.counterpartName {
+                    Text("\(tr("상대", "Counterpart")): \(name)")
+                        .font(.subheadline)
+                }
+                if let email = action.counterpartEmail, !email.isEmpty {
+                    Button {
+                        openURL(URL(string: "mailto:\(email)")!)
+                    } label: {
+                        Label("\(tr("이메일 보내기", "Send email")): \(email)", systemImage: "envelope")
+                    }
+                }
+                if let phone = action.counterpartPhone, !phone.isEmpty {
+                    Button {
+                        let digits = phone.filter { $0.isNumber }
+                        if let url = URL(string: "sms:\(digits)") {
+                            openURL(url)
+                        }
+                    } label: {
+                        Label("\(tr("문자 보내기", "Send SMS")): \(phone)", systemImage: "message")
+                    }
+                }
+            } else {
+                Text(tr("수락 전에는 연락처가 비공개입니다.", "Contact is hidden until acceptance."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    @ViewBuilder
+    private var historySection: some View {
+        if let action = localAction, !action.history.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(tr("진행 이력", "Timeline")).font(.headline)
+                ForEach(action.history.indices, id: \.self) { index in
+                    let item = action.history[index]
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(statusLabel(item.status)) · \(item.at)")
+                            .font(.caption.weight(.semibold))
+                        if let note = item.note, !note.isEmpty {
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func loadDetail() async {
+        guard !currentUserEmail.isEmpty else { return }
+        do {
+            let detail = try await APIClient.shared.fetchRecommendationDetail(
+                categoryID: categoryID,
+                recommendationID: recommendation.id,
+                viewerEmail: currentUserEmail
+            )
+            localRecommendation = detail.recommendation
+            if let action = detail.action {
+                localAction = action
+                onUpdated(action)
+            }
+        } catch {
+            // fallback 유지
+        }
+    }
+
     private func request() async {
+        guard !currentUserEmail.isEmpty else { return }
         isLoading = true
         defer { isLoading = false }
         do {
             let action = try await APIClient.shared.requestAction(
                 categoryID: categoryID,
-                recommendation: recommendation,
+                recommendation: localRecommendation,
+                requesterEmail: currentUserEmail,
+                requesterName: currentUserName.isEmpty ? nil : currentUserName,
                 note: note.isEmpty ? nil : note
             )
             localAction = action
             onUpdated(action)
-            infoMessage = "요청이 생성되었습니다."
+            infoMessage = tr("요청이 전송되었습니다.", "Request was sent.")
             note = ""
         } catch {
-            infoMessage = "요청 생성에 실패했습니다."
+            infoMessage = tr("요청 생성에 실패했습니다.", "Failed to create request.")
         }
     }
 
     private func transition(_ command: String) async {
         guard let action = localAction else { return }
+        guard !currentUserEmail.isEmpty else { return }
         isLoading = true
         defer { isLoading = false }
         do {
             let updated = try await APIClient.shared.transitionAction(
                 actionID: action.id,
                 command: command,
+                actorEmail: currentUserEmail,
                 note: note.isEmpty ? nil : note
             )
             localAction = updated
             onUpdated(updated)
-            infoMessage = "\(labelFor(command)) 처리되었습니다."
+            infoMessage = "\(labelFor(command)) \(tr("처리되었습니다.", "completed."))"
             note = ""
         } catch {
-            infoMessage = "상태 변경에 실패했습니다."
+            infoMessage = tr("상태 변경에 실패했습니다.", "Failed to update status.")
         }
     }
 
     private func labelFor(_ command: String) -> String {
         switch command {
-        case "accept": return "수락"
-        case "reject": return "거절"
-        case "confirm": return "확정"
-        case "cancel": return "취소"
+        case "accept": return tr("수락", "Accept")
+        case "reject": return tr("거절", "Reject")
+        case "confirm": return tr("확정", "Confirm")
+        case "cancel": return tr("취소", "Cancel")
         default: return command
         }
     }
@@ -723,11 +984,11 @@ private struct RecommendationActionSheet: View {
 
     private func statusLabel(_ status: String) -> String {
         switch status {
-        case "requested": return "요청됨"
-        case "accepted": return "수락됨"
-        case "rejected": return "거절됨"
-        case "confirmed": return "확정됨"
-        case "canceled": return "취소됨"
+        case "requested": return tr("요청됨", "Requested")
+        case "accepted": return tr("수락됨", "Accepted")
+        case "rejected": return tr("거절됨", "Rejected")
+        case "confirmed": return tr("확정됨", "Confirmed")
+        case "canceled": return tr("취소됨", "Canceled")
         default: return status
         }
     }

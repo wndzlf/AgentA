@@ -15,6 +15,24 @@ struct Recommendation: Identifiable, Codable, Hashable {
     let subtitle: String
     let tags: [String]
     let score: Double
+    let detail: String?
+    let imageURLs: [String]?
+    let ownerName: String?
+    let ownerEmailMasked: String?
+    let ownerPhoneMasked: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case subtitle
+        case tags
+        case score
+        case detail
+        case imageURLs = "image_urls"
+        case ownerName = "owner_name"
+        case ownerEmailMasked = "owner_email_masked"
+        case ownerPhoneMasked = "owner_phone_masked"
+    }
 }
 
 struct AgentMode: Identifiable, Codable, Hashable {
@@ -80,7 +98,15 @@ struct MatchAction: Identifiable, Codable, Hashable {
     let recommendationTitle: String
     let recommendationSubtitle: String
     let status: String
+    let actorRole: String?
+    let requesterEmail: String?
+    let requesterName: String?
+    let ownerEmailMasked: String?
     let allowedActions: [String]
+    let contactUnlocked: Bool?
+    let counterpartName: String?
+    let counterpartEmail: String?
+    let counterpartPhone: String?
     let note: String?
     let createdAt: String
     let updatedAt: String
@@ -93,7 +119,15 @@ struct MatchAction: Identifiable, Codable, Hashable {
         case recommendationTitle = "recommendation_title"
         case recommendationSubtitle = "recommendation_subtitle"
         case status
+        case actorRole = "actor_role"
+        case requesterEmail = "requester_email"
+        case requesterName = "requester_name"
+        case ownerEmailMasked = "owner_email_masked"
         case allowedActions = "allowed_actions"
+        case contactUnlocked = "contact_unlocked"
+        case counterpartName = "counterpart_name"
+        case counterpartEmail = "counterpart_email"
+        case counterpartPhone = "counterpart_phone"
         case note
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -123,11 +157,15 @@ struct AgentRequest: Codable {
     let categoryID: String?
     let mode: String?
     let message: String
+    let userEmail: String?
+    let userName: String?
 
     enum CodingKeys: String, CodingKey {
         case categoryID = "category_id"
         case mode
         case message
+        case userEmail = "user_email"
+        case userName = "user_name"
     }
 }
 
@@ -145,4 +183,20 @@ struct BootstrapResponse: Codable {
         case modes
         case recommendations
     }
+}
+
+struct RecommendationDetailResponse: Codable {
+    let recommendation: Recommendation
+    let action: MatchAction?
+}
+
+struct EmailAuthRequest: Codable {
+    let email: String
+    let name: String?
+}
+
+struct EmailAuthResponse: Codable {
+    let email: String
+    let name: String
+    let created: Bool
 }

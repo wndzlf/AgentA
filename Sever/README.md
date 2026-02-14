@@ -86,6 +86,9 @@ curl -X POST "http://127.0.0.1:8000/dev/seed?reset=true"
 - `GET /categories/{category_id}/schema?mode=find|publish`
 - `POST /agent/route` (자유문장 → 카테고리/모드 추론)
 - `POST /agent/ask` (`mode=find|publish`)
+- `GET /actions?category_id=...` (요청/수락/거절/확정 상태 조회)
+- `POST /actions/request` (요청 생성)
+- `POST /actions/{action_id}/transition` (`accept|reject|confirm|cancel`)
 - `POST /dev/seed?reset=true|false`
 
 샘플 요청:

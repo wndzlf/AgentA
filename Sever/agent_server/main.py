@@ -5,7 +5,15 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 
 from .ai_engine import AIEngine
-from .matching import board_count, publish_listing, recommend, seed_mock_board
+from .matching import (
+    board_count,
+    list_actions,
+    publish_listing,
+    recommend,
+    request_action,
+    seed_mock_board,
+    transition_action,
+)
 from .prompt_packs import (
     CATEGORY_DEFS,
     CATEGORY_DOMAIN_BY_ID,
@@ -18,9 +26,13 @@ from .prompt_packs import (
 from .schemas import (
     AskRequest,
     AskResponse,
+    ActionCreateRequest,
+    ActionListResponse,
+    ActionTransitionRequest,
     BootstrapResponse,
     Category,
     CategorySchemaResponse,
+    MatchAction,
     RouteCandidate,
     RouteRequest,
     RouteResponse,
@@ -138,6 +150,34 @@ def ask_agent(req: AskRequest) -> AskResponse:
         action_result=action_result,
         recommendations=recs,
     )
+
+
+@app.get("/actions", response_model=ActionListResponse)
+def actions(category_id: Optional[str] = None) -> ActionListResponse:
+    return ActionListResponse(actions=[MatchAction(**item) for item in list_actions(category_id=category_id)])
+
+
+@app.post("/actions/request", response_model=MatchAction)
+def create_action(req: ActionCreateRequest) -> MatchAction:
+    action = request_action(
+        category_id=req.category_id,
+        recommendation_id=req.recommendation_id,
+        recommendation_title=req.recommendation_title,
+        recommendation_subtitle=req.recommendation_subtitle,
+        note=req.note,
+    )
+    return MatchAction(**action)
+
+
+@app.post("/actions/{action_id}/transition", response_model=MatchAction)
+def update_action(action_id: str, req: ActionTransitionRequest) -> MatchAction:
+    try:
+        action = transition_action(action_id=action_id, command=req.action, note=req.note)
+        return MatchAction(**action)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="action not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/dev/seed")

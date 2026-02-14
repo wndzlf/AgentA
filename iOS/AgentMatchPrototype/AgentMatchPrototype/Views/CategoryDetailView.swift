@@ -13,6 +13,8 @@ struct CategoryDetailView: View {
     @State private var input = ""
     @State private var messages: [String] = []
     @State private var recommendations: [Recommendation] = []
+    @State private var actionByRecommendationID: [String: MatchAction] = [:]
+    @State private var selectedRecommendation: Recommendation?
     @State private var requiredFields: [CategoryField] = []
     @State private var exampleRequests: [String] = []
     @State private var isLoading = false
@@ -168,6 +170,7 @@ struct CategoryDetailView: View {
 
                 List(displayedRecommendations) { item in
                     let isHighlighted = highlightedRecommendationIDs.contains(item.id)
+                    let action = actionByRecommendationID[item.id]
                     VStack(alignment: .leading, spacing: 6) {
                         if isHighlighted {
                             Label("AI가 방금 찾은 추천", systemImage: "sparkles")
@@ -199,6 +202,18 @@ struct CategoryDetailView: View {
                         Text(item.subtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                        if let action {
+                            HStack(spacing: 6) {
+                                Image(systemName: statusIcon(for: action.status))
+                                    .font(.caption2)
+                                Text("진행 상태: \(statusLabel(for: action.status))")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(statusColor(for: action.status))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(statusColor(for: action.status).opacity(0.12), in: Capsule())
+                        }
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack {
                                 ForEach(item.tags, id: \.self) { tag in
@@ -223,6 +238,10 @@ struct CategoryDetailView: View {
                     )
                     .scaleEffect(isHighlighted ? 1.01 : 1.0)
                     .animation(.easeOut(duration: 0.22), value: isHighlighted)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedRecommendation = item
+                    }
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
@@ -314,6 +333,15 @@ struct CategoryDetailView: View {
         .onDisappear {
             speechController.stopListening()
         }
+        .sheet(item: $selectedRecommendation) { recommendation in
+            RecommendationActionSheet(
+                categoryID: category.id,
+                recommendation: recommendation,
+                currentAction: actionByRecommendationID[recommendation.id]
+            ) { updated in
+                actionByRecommendationID[updated.recommendationID] = updated
+            }
+        }
     }
 
     private func bootstrap(mode: String?) async {
@@ -322,6 +350,7 @@ struct CategoryDetailView: View {
             async let schema = APIClient.shared.fetchCategorySchema(categoryID: category.id, mode: mode)
             let response = try await boot
             let schemaResponse = try await schema
+            let actions = (try? await APIClient.shared.fetchActions(categoryID: category.id)) ?? []
             isApplyingBootstrap = true
             modes = response.modes
             if activeModeID != response.activeMode {
@@ -329,6 +358,7 @@ struct CategoryDetailView: View {
             }
             promptHint = response.promptHint
             recommendations = response.recommendations
+            actionByRecommendationID = reduceActions(actions)
             requiredFields = schemaResponse.requiredFields
             exampleRequests = schemaResponse.examples
             selectedPhotoItems = []
@@ -351,6 +381,7 @@ struct CategoryDetailView: View {
             promptHint = "서버 연결 없이 데모 모드"
             messages = ["AI: 원하는 조건을 말해주면 추천을 보여줄게요."]
             recommendations = []
+            actionByRecommendationID = [:]
             requiredFields = []
             exampleRequests = []
             selectedPhotoItems = []
@@ -395,6 +426,7 @@ struct CategoryDetailView: View {
                 recommendations = response.recommendations
                 highlightedRecommendationIDs = newIDs.isEmpty ? fallbackHighlights : newIDs
             }
+            await refreshActions()
         } catch {
             messages.append("AI: 서버 연결 실패. /Users/user/AgentA/Sever 에서 ./run_local_ai.sh 실행 후 다시 시도해주세요.")
         }
@@ -420,6 +452,54 @@ struct CategoryDetailView: View {
         return field.keywords.contains { text.contains($0.lowercased()) }
     }
 
+    private func reduceActions(_ actions: [MatchAction]) -> [String: MatchAction] {
+        var out: [String: MatchAction] = [:]
+        for action in actions {
+            if out[action.recommendationID] == nil {
+                out[action.recommendationID] = action
+            }
+        }
+        return out
+    }
+
+    private func refreshActions() async {
+        let actions = (try? await APIClient.shared.fetchActions(categoryID: category.id)) ?? []
+        actionByRecommendationID = reduceActions(actions)
+    }
+
+    private func statusLabel(for status: String) -> String {
+        switch status {
+        case "requested": return "요청됨"
+        case "accepted": return "수락됨"
+        case "rejected": return "거절됨"
+        case "confirmed": return "확정됨"
+        case "canceled": return "취소됨"
+        default: return status
+        }
+    }
+
+    private func statusIcon(for status: String) -> String {
+        switch status {
+        case "requested": return "paperplane.circle.fill"
+        case "accepted": return "checkmark.circle.fill"
+        case "rejected": return "xmark.circle.fill"
+        case "confirmed": return "checkmark.seal.fill"
+        case "canceled": return "minus.circle.fill"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "requested": return .orange
+        case "accepted": return .green
+        case "rejected": return .red
+        case "confirmed": return .blue
+        case "canceled": return .gray
+        default: return .secondary
+        }
+    }
+
     private func loadSelectedPhotos() async {
         guard !selectedPhotoItems.isEmpty else {
             attachedImages = []
@@ -433,6 +513,221 @@ struct CategoryDetailView: View {
             }
         }
         attachedImages = images
+    }
+}
+
+private struct RecommendationActionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let categoryID: String
+    let recommendation: Recommendation
+    let currentAction: MatchAction?
+    let onUpdated: (MatchAction) -> Void
+
+    @State private var localAction: MatchAction?
+    @State private var note = ""
+    @State private var isLoading = false
+    @State private var infoMessage = ""
+
+    init(
+        categoryID: String,
+        recommendation: Recommendation,
+        currentAction: MatchAction?,
+        onUpdated: @escaping (MatchAction) -> Void
+    ) {
+        self.categoryID = categoryID
+        self.recommendation = recommendation
+        self.currentAction = currentAction
+        self.onUpdated = onUpdated
+        _localAction = State(initialValue: currentAction)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(recommendation.title)
+                        .font(.title3.weight(.semibold))
+                    Text(recommendation.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if let action = localAction {
+                        HStack(spacing: 6) {
+                            Image(systemName: statusIcon(action.status))
+                            Text("현재 상태: \(statusLabel(action.status))")
+                                .font(.footnote.weight(.semibold))
+                        }
+                        .foregroundStyle(statusColor(action.status))
+                    } else {
+                        Text("아직 요청이 생성되지 않았습니다.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+
+                TextField("메모(선택)", text: $note)
+                    .textFieldStyle(.roundedBorder)
+
+                if let action = localAction {
+                    if action.allowedActions.isEmpty {
+                        Text("이 상태에서는 추가로 가능한 액션이 없습니다.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack {
+                            ForEach(action.allowedActions, id: \.self) { command in
+                                Button(labelFor(command)) {
+                                    Task { await transition(command) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(colorFor(command))
+                                .disabled(isLoading)
+                            }
+                        }
+                    }
+                } else {
+                    Button("요청 보내기") {
+                        Task { await request() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isLoading)
+                }
+
+                if !infoMessage.isEmpty {
+                    Text(infoMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let action = localAction, !action.history.isEmpty {
+                    Text("진행 이력")
+                        .font(.headline)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(action.history.indices, id: \.self) { index in
+                                let item = action.history[index]
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(statusLabel(item.status)) · \(item.at)")
+                                        .font(.caption.weight(.semibold))
+                                    if let note = item.note, !note.isEmpty {
+                                        Text(note)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding()
+            .navigationTitle("상세 액션")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("닫기") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func request() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let action = try await APIClient.shared.requestAction(
+                categoryID: categoryID,
+                recommendation: recommendation,
+                note: note.isEmpty ? nil : note
+            )
+            localAction = action
+            onUpdated(action)
+            infoMessage = "요청이 생성되었습니다."
+            note = ""
+        } catch {
+            infoMessage = "요청 생성에 실패했습니다."
+        }
+    }
+
+    private func transition(_ command: String) async {
+        guard let action = localAction else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let updated = try await APIClient.shared.transitionAction(
+                actionID: action.id,
+                command: command,
+                note: note.isEmpty ? nil : note
+            )
+            localAction = updated
+            onUpdated(updated)
+            infoMessage = "\(labelFor(command)) 처리되었습니다."
+            note = ""
+        } catch {
+            infoMessage = "상태 변경에 실패했습니다."
+        }
+    }
+
+    private func labelFor(_ command: String) -> String {
+        switch command {
+        case "accept": return "수락"
+        case "reject": return "거절"
+        case "confirm": return "확정"
+        case "cancel": return "취소"
+        default: return command
+        }
+    }
+
+    private func colorFor(_ command: String) -> Color {
+        switch command {
+        case "accept", "confirm":
+            return .green
+        case "reject":
+            return .red
+        case "cancel":
+            return .gray
+        default:
+            return .blue
+        }
+    }
+
+    private func statusLabel(_ status: String) -> String {
+        switch status {
+        case "requested": return "요청됨"
+        case "accepted": return "수락됨"
+        case "rejected": return "거절됨"
+        case "confirmed": return "확정됨"
+        case "canceled": return "취소됨"
+        default: return status
+        }
+    }
+
+    private func statusIcon(_ status: String) -> String {
+        switch status {
+        case "requested": return "paperplane.circle.fill"
+        case "accepted": return "checkmark.circle.fill"
+        case "rejected": return "xmark.circle.fill"
+        case "confirmed": return "checkmark.seal.fill"
+        case "canceled": return "minus.circle.fill"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "requested": return .orange
+        case "accepted": return .green
+        case "rejected": return .red
+        case "confirmed": return .blue
+        case "canceled": return .gray
+        default: return .secondary
+        }
     }
 }
 

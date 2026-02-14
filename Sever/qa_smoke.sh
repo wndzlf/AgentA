@@ -92,4 +92,52 @@ if [[ -z "$ASK_ACTION" ]]; then
 fi
 
 echo "[OK] ask(publish): $ASK_ACTION"
+
+# 상태머신: 요청 -> 수락 -> 확정
+FIRST_REC_ID="$($PYTHON_BIN -c 'import json,sys; recs=json.loads(sys.argv[1]).get("recommendations",[]); print(recs[0]["id"] if recs else "")' "$ASK_FIND_RESP")"
+FIRST_REC_TITLE="$($PYTHON_BIN -c 'import json,sys; recs=json.loads(sys.argv[1]).get("recommendations",[]); print(recs[0]["title"] if recs else "")' "$ASK_FIND_RESP")"
+FIRST_REC_SUBTITLE="$($PYTHON_BIN -c 'import json,sys; recs=json.loads(sys.argv[1]).get("recommendations",[]); print(recs[0]["subtitle"] if recs else "")' "$ASK_FIND_RESP")"
+
+if [[ -z "$FIRST_REC_ID" ]]; then
+  echo "[ERROR] 액션 테스트용 추천 ID 추출 실패"
+  exit 1
+fi
+
+ACTION_CREATE_PAYLOAD="$(printf '{"category_id":"trade","recommendation_id":"%s","recommendation_title":"%s","recommendation_subtitle":"%s","note":"첫 요청"}' "$FIRST_REC_ID" "$FIRST_REC_TITLE" "$FIRST_REC_SUBTITLE")"
+ACTION_CREATE_RESP="$(curl -fsS -X POST "http://$HOST:$PORT/actions/request" -H 'Content-Type: application/json' -d "$ACTION_CREATE_PAYLOAD")"
+ACTION_ID="$($PYTHON_BIN -c 'import json,sys; print(json.loads(sys.argv[1]).get("id",""))' "$ACTION_CREATE_RESP")"
+ACTION_STATUS="$($PYTHON_BIN -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",""))' "$ACTION_CREATE_RESP")"
+if [[ -z "$ACTION_ID" || "$ACTION_STATUS" != "requested" ]]; then
+  echo "[ERROR] action request 생성 실패"
+  exit 1
+fi
+
+echo "[OK] action(request): $ACTION_ID"
+
+ACTION_ACCEPT_RESP="$(curl -fsS -X POST "http://$HOST:$PORT/actions/$ACTION_ID/transition" -H 'Content-Type: application/json' -d '{"action":"accept","note":"수락 테스트"}')"
+ACTION_ACCEPT_STATUS="$($PYTHON_BIN -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",""))' "$ACTION_ACCEPT_RESP")"
+if [[ "$ACTION_ACCEPT_STATUS" != "accepted" ]]; then
+  echo "[ERROR] action accept 실패: $ACTION_ACCEPT_STATUS"
+  exit 1
+fi
+
+echo "[OK] action(accept)"
+
+ACTION_CONFIRM_RESP="$(curl -fsS -X POST "http://$HOST:$PORT/actions/$ACTION_ID/transition" -H 'Content-Type: application/json' -d '{"action":"confirm","note":"확정 테스트"}')"
+ACTION_CONFIRM_STATUS="$($PYTHON_BIN -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",""))' "$ACTION_CONFIRM_RESP")"
+if [[ "$ACTION_CONFIRM_STATUS" != "confirmed" ]]; then
+  echo "[ERROR] action confirm 실패: $ACTION_CONFIRM_STATUS"
+  exit 1
+fi
+
+echo "[OK] action(confirm)"
+
+ACTION_LIST_RESP="$(curl -fsS "http://$HOST:$PORT/actions?category_id=trade")"
+ACTION_LIST_COUNT="$($PYTHON_BIN -c 'import json,sys; print(len(json.loads(sys.argv[1]).get("actions",[])))' "$ACTION_LIST_RESP")"
+if [[ "$ACTION_LIST_COUNT" -lt 1 ]]; then
+  echo "[ERROR] action list 비어있음"
+  exit 1
+fi
+
+echo "[OK] action(list): count=$ACTION_LIST_COUNT"
 echo "[DONE] QA smoke passed"

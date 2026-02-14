@@ -80,3 +80,40 @@ class AskResponse(BaseModel):
     active_mode: str
     action_result: Optional[str] = None
     recommendations: List[Recommendation]
+
+
+class ActionHistoryItem(BaseModel):
+    status: str
+    note: Optional[str] = None
+    at: str
+
+
+class MatchAction(BaseModel):
+    id: str
+    category_id: str
+    recommendation_id: str
+    recommendation_title: str
+    recommendation_subtitle: str = ""
+    status: str
+    allowed_actions: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    created_at: str
+    updated_at: str
+    history: List[ActionHistoryItem] = Field(default_factory=list)
+
+
+class ActionCreateRequest(BaseModel):
+    category_id: Optional[str] = None
+    recommendation_id: str
+    recommendation_title: str
+    recommendation_subtitle: str = ""
+    note: Optional[str] = None
+
+
+class ActionTransitionRequest(BaseModel):
+    action: str
+    note: Optional[str] = None
+
+
+class ActionListResponse(BaseModel):
+    actions: List[MatchAction] = Field(default_factory=list)

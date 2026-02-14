@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import re
 from collections import defaultdict
 from random import random
@@ -96,6 +97,27 @@ CURATED_PROFILE_TITLES = {
 
 # 카테고리별 실제 서버 보드(로컬 메모리)
 BOARD: DefaultDict[str, List[dict]] = defaultdict(list)
+
+# 요청/수락/거절/확정 상태머신 (로컬 메모리)
+ACTIONS: Dict[str, dict] = {}
+ACTION_INDEX_BY_CATEGORY: DefaultDict[str, List[str]] = defaultdict(list)
+ACTION_INDEX_BY_RECOMMENDATION: DefaultDict[str, List[str]] = defaultdict(list)
+
+ACTION_TRANSITIONS: Dict[str, Dict[str, str]] = {
+    "requested": {
+        "accept": "accepted",
+        "reject": "rejected",
+        "cancel": "canceled",
+    },
+    "accepted": {
+        "confirm": "confirmed",
+        "reject": "rejected",
+        "cancel": "canceled",
+    },
+    "rejected": {},
+    "confirmed": {},
+    "canceled": {},
+}
 
 CURATED_SEED_BOARD_DATA: Dict[str, List[dict]] = {
     "friend": [
@@ -379,6 +401,9 @@ def _seed_items_for_category(category_id: str) -> List[dict]:
 def seed_mock_board(reset: bool = False) -> Dict[str, int]:
     if reset:
         BOARD.clear()
+        ACTIONS.clear()
+        ACTION_INDEX_BY_CATEGORY.clear()
+        ACTION_INDEX_BY_RECOMMENDATION.clear()
 
     counts: Dict[str, int] = {}
     for category in CATEGORIES:
@@ -406,6 +431,119 @@ def seed_mock_board(reset: bool = False) -> Dict[str, int]:
 
 def board_count() -> Dict[str, int]:
     return {cid: len(items) for cid, items in BOARD.items() if items}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _allowed_actions_for(status: str) -> List[str]:
+    return list(ACTION_TRANSITIONS.get(status, {}).keys())
+
+
+def _serialize_action(action: dict) -> dict:
+    return {
+        "id": action["id"],
+        "category_id": action["category_id"],
+        "recommendation_id": action["recommendation_id"],
+        "recommendation_title": action["recommendation_title"],
+        "recommendation_subtitle": action.get("recommendation_subtitle", ""),
+        "status": action["status"],
+        "allowed_actions": _allowed_actions_for(action["status"]),
+        "note": action.get("note"),
+        "created_at": action["created_at"],
+        "updated_at": action["updated_at"],
+        "history": list(action.get("history", [])),
+    }
+
+
+def list_actions(category_id: Optional[str] = None) -> List[dict]:
+    if category_id:
+        ids = ACTION_INDEX_BY_CATEGORY.get(category_id, [])
+    else:
+        ids = list(ACTIONS.keys())
+
+    actions = [ACTIONS[action_id] for action_id in ids if action_id in ACTIONS]
+    actions.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return [_serialize_action(item) for item in actions]
+
+
+def find_action_by_recommendation(category_id: str, recommendation_id: str) -> Optional[dict]:
+    candidate_ids = ACTION_INDEX_BY_RECOMMENDATION.get(recommendation_id, [])
+    for action_id in candidate_ids:
+        action = ACTIONS.get(action_id)
+        if not action:
+            continue
+        if action["category_id"] != category_id:
+            continue
+        if action["status"] in {"requested", "accepted"}:
+            return action
+    return None
+
+
+def request_action(
+    category_id: Optional[str],
+    recommendation_id: str,
+    recommendation_title: str,
+    recommendation_subtitle: str = "",
+    note: Optional[str] = None,
+) -> dict:
+    cid = category_id or "friend"
+    existing = find_action_by_recommendation(cid, recommendation_id)
+    if existing:
+        return _serialize_action(existing)
+
+    now = _now_iso()
+    action_id = f"act-{uuid4().hex[:10]}"
+    action = {
+        "id": action_id,
+        "category_id": cid,
+        "recommendation_id": recommendation_id,
+        "recommendation_title": recommendation_title,
+        "recommendation_subtitle": recommendation_subtitle,
+        "status": "requested",
+        "note": note,
+        "created_at": now,
+        "updated_at": now,
+        "history": [
+            {
+                "status": "requested",
+                "note": note,
+                "at": now,
+            }
+        ],
+    }
+    ACTIONS[action_id] = action
+    ACTION_INDEX_BY_CATEGORY[cid].append(action_id)
+    ACTION_INDEX_BY_RECOMMENDATION[recommendation_id].append(action_id)
+    return _serialize_action(action)
+
+
+def transition_action(action_id: str, command: str, note: Optional[str] = None) -> dict:
+    action = ACTIONS.get(action_id)
+    if not action:
+        raise KeyError(action_id)
+
+    current = action["status"]
+    possible = ACTION_TRANSITIONS.get(current, {})
+    if command not in possible:
+        allowed = ", ".join(possible.keys()) if possible else "없음"
+        raise ValueError(f"invalid transition: {current} -> {command} (allowed: {allowed})")
+
+    next_status = possible[command]
+    now = _now_iso()
+    action["status"] = next_status
+    action["updated_at"] = now
+    if note is not None:
+        action["note"] = note
+    action.setdefault("history", []).append(
+        {
+            "status": next_status,
+            "note": note,
+            "at": now,
+        }
+    )
+    return _serialize_action(action)
 
 
 def publish_listing(category_id: Optional[str], message: str) -> Recommendation:

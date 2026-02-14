@@ -78,4 +78,67 @@ final class APIClient {
         }
         return try JSONDecoder().decode(RouteResponse.self, from: data)
     }
+
+    func fetchActions(categoryID: String? = nil) async throws -> [MatchAction] {
+        var components = URLComponents(string: "\(baseURL)/actions")
+        if let categoryID, !categoryID.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "category_id", value: categoryID)]
+        }
+        guard let url = components?.url else { throw APIError.invalidURL }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        let body = try JSONDecoder().decode(ActionListResponse.self, from: data)
+        return body.actions
+    }
+
+    func requestAction(
+        categoryID: String,
+        recommendation: Recommendation,
+        note: String? = nil
+    ) async throws -> MatchAction {
+        guard let url = URL(string: "\(baseURL)/actions/request") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "category_id": categoryID,
+                "recommendation_id": recommendation.id,
+                "recommendation_title": recommendation.title,
+                "recommendation_subtitle": recommendation.subtitle,
+                "note": note ?? ""
+            ],
+            options: []
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        return try JSONDecoder().decode(MatchAction.self, from: data)
+    }
+
+    func transitionAction(
+        actionID: String,
+        command: String,
+        note: String? = nil
+    ) async throws -> MatchAction {
+        guard let url = URL(string: "\(baseURL)/actions/\(actionID)/transition") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "action": command,
+                "note": note ?? ""
+            ],
+            options: []
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        return try JSONDecoder().decode(MatchAction.self, from: data)
+    }
 }

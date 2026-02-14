@@ -142,6 +142,18 @@ class RecommendationDetailResponse(BaseModel):
     action: Optional[MatchAction] = None
 
 
+class MyListingItem(BaseModel):
+    category_id: str
+    category_name: str
+    recommendation: Recommendation
+    created_at: str
+    updated_at: str
+
+
+class MyListingsResponse(BaseModel):
+    listings: List[MyListingItem] = Field(default_factory=list)
+
+
 class EmailAuthRequest(BaseModel):
     email: str
     name: Optional[str] = None

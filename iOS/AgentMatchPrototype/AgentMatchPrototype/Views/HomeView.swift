@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var showQuickAgent = false
     @State private var selectedDomain = "all"
     @State private var showAuthGate = false
+    @State private var showMyPage = false
     @AppStorage("current_user_email") private var currentUserEmail = ""
     @AppStorage("current_user_name") private var currentUserName = ""
     @AppStorage("app_language_code") private var appLanguageCode = "ko"
@@ -134,6 +135,12 @@ struct HomeView: View {
             .navigationDestination(for: Category.self) { category in
                 CategoryDetailView(category: category)
             }
+            .navigationDestination(isPresented: $showMyPage) {
+                MyPageView(
+                    userEmail: currentUserEmail,
+                    userName: currentUserName
+                )
+            }
             .sheet(isPresented: $showQuickAgent) {
                 QuickAgentView()
             }
@@ -145,6 +152,15 @@ struct HomeView: View {
                 .interactiveDismissDisabled(true)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !currentUserEmail.isEmpty {
+                        Button {
+                            showMyPage = true
+                        } label: {
+                            Label(tr("마이", "My"), systemImage: "person.crop.circle")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Section(tr("언어", "Language")) {
@@ -160,6 +176,9 @@ struct HomeView: View {
                         Section(tr("계정", "Account")) {
                             if !currentUserEmail.isEmpty {
                                 Text(currentUserEmail)
+                                Button(tr("마이 페이지", "My Page")) {
+                                    showMyPage = true
+                                }
                                 Button(tr("로그아웃", "Sign out"), role: .destructive) {
                                     currentUserEmail = ""
                                     currentUserName = ""
@@ -295,6 +314,158 @@ private struct EmailAuthView: View {
         } catch {
             errorMessage = tr("로그인 실패. 로컬 서버 상태를 확인해 주세요.", "Sign-in failed. Check local server status.")
         }
+    }
+}
+
+private struct MyPageView: View {
+    let userEmail: String
+    let userName: String
+
+    @AppStorage("app_language_code") private var appLanguageCode = "ko"
+    @State private var todayOnly = true
+    @State private var listings: [MyListingItem] = []
+    @State private var isLoading = false
+    @State private var errorMessage = ""
+
+    private var isEnglish: Bool { !appLanguageCode.lowercased().hasPrefix("ko") }
+    private func tr(_ ko: String, _ en: String) -> String { isEnglish ? en : ko }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            headerCard
+
+            Picker("scope", selection: $todayOnly) {
+                Text(tr("오늘", "Today")).tag(true)
+                Text(tr("전체", "All")).tag(false)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+
+            if isLoading {
+                ProgressView(tr("불러오는 중...", "Loading..."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else if !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if listings.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "tray")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                    Text(tr("내가 올린 글이 아직 없습니다.", "You have no posted items yet."))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(listings) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.categoryName)
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(AppTheme.tint.opacity(0.12), in: Capsule())
+                            Spacer()
+                            Text(formatDate(item.updatedAt))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(item.recommendation.title)
+                            .font(.headline)
+                        Text(item.recommendation.subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack {
+                                ForEach(item.recommendation.tags, id: \.self) { tag in
+                                    Text("#\(tag)")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(AppTheme.tagPill, in: Capsule())
+                                }
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .listRowBackground(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.ultraThinMaterial)
+                    )
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await load()
+                }
+            }
+        }
+        .background(AppTheme.pageBackground.ignoresSafeArea())
+        .navigationTitle(tr("마이 페이지", "My Page"))
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await load()
+        }
+        .onChange(of: todayOnly) { _ in
+            Task { await load() }
+        }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(userName.isEmpty ? userEmail : userName)
+                .font(.headline)
+            Text(userEmail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(
+                tr(
+                    "AI 에이전트가 올린 글을 수정하려면 해당 카테고리의 올리기 모드에서 다시 말해보세요.",
+                    "To update your posts, go to the category's Post mode and speak again."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
+    }
+
+    private func load() async {
+        guard !userEmail.isEmpty else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            listings = try await APIClient.shared.fetchMyListings(email: userEmail, todayOnly: todayOnly)
+            errorMessage = ""
+        } catch {
+            errorMessage = tr("내 등록글을 불러오지 못했습니다.", "Failed to load your listings.")
+            listings = []
+        }
+    }
+
+    private func formatDate(_ iso: String) -> String {
+        let source = ISO8601DateFormatter()
+        source.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = source.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        guard let date else { return iso }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: isEnglish ? "en_US" : "ko_KR")
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        if todayOnly {
+            return formatter.string(from: date)
+        }
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
     }
 }
 

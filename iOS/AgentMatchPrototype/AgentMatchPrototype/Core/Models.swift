@@ -200,3 +200,25 @@ struct EmailAuthResponse: Codable {
     let name: String
     let created: Bool
 }
+
+struct MyListingItem: Codable, Identifiable, Hashable {
+    let categoryID: String
+    let categoryName: String
+    let recommendation: Recommendation
+    let createdAt: String
+    let updatedAt: String
+
+    var id: String { "\(categoryID)-\(recommendation.id)" }
+
+    enum CodingKeys: String, CodingKey {
+        case categoryID = "category_id"
+        case categoryName = "category_name"
+        case recommendation
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct MyListingsResponse: Codable {
+    let listings: [MyListingItem]
+}

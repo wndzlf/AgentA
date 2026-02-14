@@ -205,4 +205,18 @@ final class APIClient {
         }
         return try JSONDecoder().decode(EmailAuthResponse.self, from: data)
     }
+
+    func fetchMyListings(email: String, todayOnly: Bool = true) async throws -> [MyListingItem] {
+        let items = [
+            URLQueryItem(name: "email", value: email),
+            URLQueryItem(name: "today_only", value: todayOnly ? "true" : "false"),
+        ]
+        guard let url = makeURL(path: "/me/listings", queryItems: items) else { throw APIError.invalidURL }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badResponse
+        }
+        let body = try JSONDecoder().decode(MyListingsResponse.self, from: data)
+        return body.listings
+    }
 }

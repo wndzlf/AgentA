@@ -9,6 +9,7 @@ from .ai_engine import AIEngine
 from .matching import (
     board_count,
     list_actions,
+    list_user_listings,
     publish_listing,
     recommendation_detail,
     recommend,
@@ -37,6 +38,7 @@ from .schemas import (
     EmailAuthRequest,
     EmailAuthResponse,
     MatchAction,
+    MyListingsResponse,
     RecommendationDetailResponse,
     RouteCandidate,
     RouteRequest,
@@ -404,6 +406,22 @@ def auth_email(req: EmailAuthRequest) -> EmailAuthResponse:
     created = email not in USERS_BY_EMAIL
     USERS_BY_EMAIL[email] = {"email": email, "name": name}
     return EmailAuthResponse(email=email, name=name, created=created)
+
+
+@app.get("/me/listings", response_model=MyListingsResponse)
+def my_listings(
+    email: str,
+    today_only: bool = True,
+    lang: Optional[str] = None,
+) -> MyListingsResponse:
+    normalized = email.strip().lower()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="email is required")
+    listings = list_user_listings(user_email=normalized, today_only=today_only)
+    if _normalized_lang(lang) == "en":
+        for item in listings:
+            item["category_name"] = _to_english_label(item["category_id"], item["category_name"])
+    return MyListingsResponse(listings=listings)
 
 
 @app.post("/dev/seed")

@@ -325,6 +325,7 @@ def _insert_board_item(
     item_key = item_id or f"{category_id}-user-{uuid4().hex[:8]}"
     resolved_detail = detail or f"{title} · {subtitle}. 태그: {', '.join(tags[:4])}"
     resolved_images = image_urls if image_urls is not None else _image_seed_urls(item_key, count=3)
+    now = _now_iso()
     item = {
         "id": item_key,
         "title": title,
@@ -335,7 +336,8 @@ def _insert_board_item(
         "owner_name": resolved_owner_name,
         "owner_email": resolved_owner_email,
         "owner_phone": resolved_owner_phone,
-        "created_at": _now_iso(),
+        "created_at": now,
+        "updated_at": now,
     }
     BOARD[category_id].insert(0, item)
     BOARD[category_id] = BOARD[category_id][:120]
@@ -911,3 +913,43 @@ def recommendation_detail(category_id: str, recommendation_id: str, viewer_email
         "recommendation": recommendation,
         "action": _serialize_action(action, viewer_email=viewer_email) if action else None,
     }
+
+
+def _is_today_utc(iso_str: str) -> bool:
+    try:
+        dt = datetime.fromisoformat(iso_str)
+    except Exception:
+        return False
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).date() == now.date()
+
+
+def list_user_listings(user_email: str, today_only: bool = True) -> List[dict]:
+    email = (user_email or "").strip().lower()
+    if not email:
+        return []
+
+    out: List[dict] = []
+    for cid, items in BOARD.items():
+        for item in items:
+            owner = (item.get("owner_email") or "").strip().lower()
+            if owner != email:
+                continue
+            created_at = item.get("created_at", "")
+            updated_at = item.get("updated_at") or created_at
+            if today_only and not _is_today_utc(created_at):
+                continue
+            out.append(
+                {
+                    "category_id": cid,
+                    "category_name": CATEGORY_NAME_BY_ID.get(cid, cid),
+                    "recommendation": _recommendation_from_item(item, score=0.99).dict(),
+                    "created_at": created_at,
+                    "updated_at": updated_at,
+                }
+            )
+
+    out.sort(key=lambda row: row.get("updated_at", ""), reverse=True)
+    return out
